@@ -26,8 +26,7 @@ ENDPOINTS = {
     "login": "/user/logform.aspx",
     "resources": "/user/risorse.aspx",
     "get_book": "/media/scheda.aspx",
-    "redownload_first": "/help/helpdeskdl.aspx",
-    "redownload_second": "/help/dlrepeat.aspx",
+    "redownload": "/help/dlrepeat.aspx",
     "download_first": "/media/downloadebad.aspx",
     "download_second": "/media/downloadebad2.aspx",
     "download_third": "/media/downloadebadok.aspx",
@@ -89,7 +88,8 @@ class MLOLClient:
 
         adapter = HTTPAdapter(
             max_retries=Retry(
-                total=10,
+                total=3,
+                backoff_factor=1,
                 status_forcelist=[404, 429, 500, 502, 503, 504],
                 method_whitelist=["HEAD", "GET", "OPTIONS"],
             )
@@ -220,22 +220,18 @@ class MLOLClient:
             logging.error(f"Failed to find owned book {book_id} in your profile")
             raise
 
-        self.session.request(
-            "GET",
-            url=ENDPOINTS["redownload_first"],
-            params={"idp": loan_id},
-        )
         response = self.session.request(
             "GET",
-            url=ENDPOINTS["redownload_second"],
+            url=ENDPOINTS["redownload"],
             headers={
                 **self.session.headers,
                 **{
-                    "Host": self.session.base_url.lstrip("https://"),
-                    "Referer": f"{self.session.base_url}{ENDPOINTS['redownload_second']}?idp={loan_id}",
+                    "Host": self.session.base_url.replace("https://", ""),
+                    "Referer": f"{self.session.base_url}/help/helpdeskdl.aspx?idp={loan_id}",
                 },
             },
             params={"idp": loan_id},
+            allow_redirects=False,
         )
         return response
 
@@ -280,6 +276,7 @@ class MLOLClient:
             response = self._redownload_owned_book(book_id)
         elif book.status != "available":
             logging.error(f"Book is not available for download. Status: {book.status}")
+            return
         else:
             # We have to perform all three requests like a user would, or the download will fail
             self.session.request(
@@ -299,10 +296,18 @@ class MLOLClient:
                     **self.session.headers,
                     **{
                         "Host": self.session.base_url.lstrip("https://"),
-                        "Referer": f"{self.session.base_url}{ENDPOINTS['download_second']}",
+                        "Referer": f"{self.session.base_url}{ENDPOINTS['download_second']}&unid={book_id}&form=epub",
                     },
                 },
                 params={"unid": book_id, "form": "epub"},
+                allow_redirects=False,
+            )
+
+        if response.status_code == 302:
+            response = self.session.request(
+                "GET",
+                url=response.headers["Location"],
+                headers={**self.session.headers, **{"Sec-Fetch-Site": "cross-site"}},
             )
 
         if response.text.startswith("<fulfillmentToken"):
