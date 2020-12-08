@@ -1,26 +1,28 @@
 A Python client for interfacing with MLOL (medialibrary.it)
 
-**Note: This is still a beta version, features and API are subject to change until first release.** Any feedback is welcome!
+**Note: This is still a beta version, features and API are subject to change until first release.**
 
-### Features
-- Public (medialibrary.it) and private (yourlibrary.medialibrary.it)
-- Book search and download (.epub/.acsm)
+Any feedback is welcome!
+
+## Features
+- Public (medialibrary.it) and private (yourlibrary.medialibrary.it) access
+- Book search and download (initial support, only .epub/.acsm)
 - Page-level (coarse) and book-level (detailed) scraping
 
-### Installation
+## Installation
 ```python
-pip install -r requirement.txt
+pip install -r requirements.txt
 python setup.py install
 ```
 
-### Usage examples
+## Usage examples
 ```python
 from mlol_client import MLOLClient
 
-# public website
+# public
 mlol = MLOLClient()
 
-# logged in
+# authenticated
 mlol = MLOLClient(subdomain="your_library.medialibrary.it", username="your_username", password="your_password")
 ```
 
@@ -31,8 +33,8 @@ the search results don't have what you're looking for, unless you're searching b
 - Scrape all books
     ```python
     books = []
-    page_iterator = mlol.search_books("")
-    for page in page_iterator:
+    page_generator = mlol.search_books("")
+    for page in page_generator:
         books += page
     ```
 
