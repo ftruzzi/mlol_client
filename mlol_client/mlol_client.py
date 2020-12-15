@@ -27,9 +27,7 @@ ENDPOINTS = {
     "resources": "/user/risorse.aspx",
     "get_book": "/media/scheda.aspx",
     "redownload": "/help/dlrepeat.aspx",
-    "download_first": "/media/downloadebad.aspx",
-    "download_second": "/media/downloadebad2.aspx",
-    "download_third": "/media/downloadebadok.aspx",
+    "download": "/media/downloadebadok.aspx",
 }
 
 
@@ -242,6 +240,9 @@ class MLOLClient:
             url=ENDPOINTS["get_book"],
             params={"id": book_id},
         )
+        if "alert.aspx" in response.url:
+            logging.warning(f"Failed to fetch book {book_id}. Might not be available to your library.")
+            return None
         soup = BeautifulSoup(response.text, "html.parser")
         book_data = self._parse_book_page(soup)
         if book_data["title"] is None:
@@ -278,25 +279,14 @@ class MLOLClient:
             logging.error(f"Book is not available for download. Status: {book.status}")
             return
         else:
-            # We have to perform all three requests like a user would, or the download will fail
-            self.session.request(
-                "GET",
-                url=ENDPOINTS["download_first"],
-                params={"unid": book_id},
-            )
-            self.session.request(
-                "GET",
-                url=ENDPOINTS["download_second"],
-                params={"unid": book_id, "form": "epub"},
-            )
             response = self.session.request(
                 "GET",
-                url=ENDPOINTS["download_third"],
+                url=ENDPOINTS["download"],
                 headers={
                     **self.session.headers,
                     **{
                         "Host": self.session.base_url.lstrip("https://"),
-                        "Referer": f"{self.session.base_url}{ENDPOINTS['download_second']}&unid={book_id}&form=epub",
+                        "Referer": f"{self.session.base_url}/media/downloadebad2.aspx&unid={book_id}&form=epub",
                     },
                 },
                 params={"unid": book_id, "form": "epub"},
