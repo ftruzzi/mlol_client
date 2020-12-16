@@ -44,6 +44,8 @@ class MLOLBook:
         language=None,
         description=None,
         year=None,
+        formats=None,
+        drm=None,
     ):
         self.id = id
         self.title = title
@@ -54,6 +56,8 @@ class MLOLBook:
         self.language = language
         self.description = description
         self.year = year
+        self.formats = formats
+        self.drm = drm
 
     def __repr__(self):
         values = {
@@ -168,12 +172,12 @@ class MLOLClient:
         ) = publisher = ISBNs = status = description = language = year = None
 
         try:
-            title = page.select(".book-title")[0].text.strip()
+            title = page.select_one(".book-title").text.strip()
             authors = [
                 a.strip()
-                for a in page.select(".authors_title")[0].text.strip().split(";")
+                for a in page.select_one(".authors_title").text.strip().split(";")
             ]
-            publisher = page.select(".publisher_title > span > a")[0].text.strip()
+            publisher = page.select_one(".publisher_title > span > a").text.strip()
             ISBNs = [i.text.strip() for i in page.find_all(attrs={"itemprop": "isbn"})]
             status = self._parse_book_status(page.select(".panel-mlol")[0].text.strip())
             description = next(
@@ -186,7 +190,14 @@ class MLOLClient:
             year = int(
                 page.find("span", attrs={"itemprop": "datePublished"}).text.strip()
             )
-        except AttributeError as e:
+            # e.g. "EPUB/PDF con DRM Adobe"
+            formats_str = (
+                page.find("b", text=re.compile("FORMATO"))
+                .parent.parent.find("span")
+                .text.strip()
+            )
+            drm = "drm" in formats_str.lower()
+        except (AttributeError, IndexError) as e:
             # silently fail if we can't get specific values -- not all books have them
             pass
 
@@ -199,6 +210,8 @@ class MLOLClient:
             "description": description,
             "language": language,
             "year": year,
+            "formats": [f.strip().lower() for f in formats_str.split()[0].split("/")],
+            "drm": drm,
         }
 
     def _redownload_owned_book(self, book_id: str) -> Response:
@@ -241,7 +254,9 @@ class MLOLClient:
             params={"id": book_id},
         )
         if "alert.aspx" in response.url:
-            logging.warning(f"Failed to fetch book {book_id}. Might not be available to your library.")
+            logging.warning(
+                f"Failed to fetch book {book_id}. Might not be available to your library."
+            )
             return None
         soup = BeautifulSoup(response.text, "html.parser")
         book_data = self._parse_book_page(soup)
@@ -259,6 +274,8 @@ class MLOLClient:
             language=book_data["language"],
             description=book_data["description"],
             year=book_data["year"],
+            formats=book_data["formats"],
+            drm=book_data["drm"],
         )
 
     def get_book(self, book: MLOLBook) -> Optional[MLOLBook]:
