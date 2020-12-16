@@ -2,6 +2,7 @@ import logging
 import re
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from typing import Optional, List, Generator
 
 from bs4 import BeautifulSoup, Tag
@@ -31,6 +32,7 @@ ENDPOINTS = {
     "download": "/media/downloadebadok.aspx",
     "pre_reserve": "/media/prenota.aspx",
     "reserve": "/media/prenota2.aspx",
+    "cancel_reservation": "/media/annullaPr.aspx",
 }
 
 
@@ -69,6 +71,42 @@ class MLOLBook:
             if v is not None
         }
         return f"<mlol_client.MLOLBook: {values}>"
+
+
+class MLOLReservation:
+    def __init__(
+        self,
+        *,
+        id: str,
+        book_id: str,
+        book: MLOLBook = None,
+        date: datetime = None,
+        status: str = None,
+        queue_position: int = None,
+    ):
+        self.id = str(id)
+        self.book_id = book_id
+        self.book = book
+        self.date = date
+        self.status = status
+        self.queue_position = queue_position
+
+
+class MLOLLoan:
+    def __init__(
+        self,
+        *,
+        id: str,
+        book_id: str,
+        book: MLOLBook = None,
+        start_date: datetime = None,
+        end_date: datetime = None,
+    ):
+        self.id = str(id)
+        self.book_id = book_id
+        self.book = book
+        self.start_date = start_date
+        self.end_date = end_date
 
 
 class MLOLClient:
@@ -221,36 +259,25 @@ class MLOLClient:
         return book_data
 
     def _redownload_owned_book(self, book_id: str) -> Response:
-        response = self.session.request("GET", url=ENDPOINTS["resources"])
-        soup = BeautifulSoup(response.text, "html.parser")
-        try:
-            loan_entry = soup.find(
-                "a", attrs={"href": re.compile(f"({book_id})")}
-            ).parent.parent
-            loan_id = re.search(
-                r"(?<=idp=)\d+$",
-                loan_entry.select(".download_button.bottom-buffer-10 > a")[0]
-                .attrs["href"]
-                .lstrip(".."),
-            ).group()
-        except Exception as e:
-            logging.error(f"Failed to find owned book {book_id} in your profile")
-            raise
-
-        response = self.session.request(
-            "GET",
-            url=ENDPOINTS["redownload"],
-            headers={
-                **self.session.headers,
-                **{
-                    "Host": self.session.base_url.replace("https://", ""),
-                    "Referer": f"{self.session.base_url}/help/helpdeskdl.aspx?idp={loan_id}",
+        active_loans = self.get_resources()["active_loans"]
+        if loan_id := next((l.id for l in active_loans if l.book_id == book_id), None):
+            response = self.session.request(
+                "GET",
+                url=ENDPOINTS["redownload"],
+                headers={
+                    **self.session.headers,
+                    **{
+                        "Host": self.session.base_url.replace("https://", ""),
+                        "Referer": f"{self.session.base_url}/help/helpdeskdl.aspx?idp={loan_id}",
+                    },
                 },
-            },
-            params={"idp": loan_id},
-            allow_redirects=False,
-        )
-        return response
+                params={"idp": loan_id},
+                allow_redirects=False,
+            )
+            return response
+
+        logging.error(f"Failed to find owned book {book_id} in your profile")
+        raise
 
     def get_book_by_id(self, book_id: str) -> Optional[MLOLBook]:
         logging.debug(f"Fetching book {book_id}")
@@ -285,6 +312,9 @@ class MLOLClient:
         )
 
     def get_book(self, book: MLOLBook) -> Optional[MLOLBook]:
+        if not isinstance(book, MLOLBook):
+            raise ValueError(f"Expected MLOLBook, got {type(book)}")
+
         return self.get_book_by_id(book.id)
 
     def download_book_by_id(self, book_id: str) -> Optional[bytes]:
@@ -332,6 +362,9 @@ class MLOLClient:
             return None
 
     def download_book(self, book: MLOLBook) -> Optional[bytes]:
+        if not isinstance(book, MLOLBook):
+            raise ValueError(f"Expected MLOLBook, got {type(book)}")
+
         return self.download_book_by_id(book.id)
 
     def _search_books_paginated(
@@ -444,5 +477,160 @@ class MLOLClient:
         logging.error(f"Failed to reserve book with ID {book_id} (unknown outcome)")
 
     def reserve_book(self, book: MLOLBook, *, email: str) -> bool:
+        if not isinstance(book, MLOLBook):
+            raise ValueError(f"Expected MLOLBook, got {type(book)}")
+
         return self.reserve_book_by_id(book.id, email=email)
 
+    def cancel_reservation_by_id(self, reservation_id: str) -> Optional[bool]:
+        params = {"id": reservation_id}
+        headers = {
+            **self.session.headers,
+            **{
+                "Host": self.session.base_url.replace("https://", ""),
+                "Referer": f"{self.session.base_url}/user/risorse.aspx",
+                "Accept-Encoding": "gzip, deflate, br",
+            },
+        }
+        response = self.session.request(
+            "GET",
+            url=ENDPOINTS["cancel_reservation"],
+            headers=headers,
+            params=params,
+            allow_redirects=False,
+        )
+        redirect_url = response.headers["Location"]
+
+        if redirect_url.endswith("msg=970"):
+            # this is a "success" redirect
+            return True
+        elif redirect_url.endswith("msg=960"):
+            # "error" redirect
+            logging.error(f"Failed to cancel reservation #{reservation_id}")
+            return False
+        else:
+            logging.error(
+                f"Failed to cancel reservation #{reservation_id} (unknown outcome)"
+            )
+
+    def cancel_book_reservation(self, book: MLOLBook) -> Optional[bool]:
+        if not isinstance(book, MLOLBook):
+            raise ValueError(f"Expected MLOLBook, got {type(book)}")
+
+        if not self.session.cookies.get(".ASPXAUTH"):
+            logging.error(
+                "You need to be authenticated to MLOL in order to manage reservations."
+            )
+            return
+
+        if book.status is None:
+            book = self.get_book_by_id(book.id)
+
+        if book.status != "reserved":
+            logging.error(
+                f"You don't have book #{book.id} reserved. Status: {book.status}"
+            )
+            return False
+
+        for reservation in self.get_resources()["reservations"]:
+            if reservation.book_id == book.id:
+                return self.cancel_reservation_by_id(reservation.id)
+
+        logging.error(
+            f"Could not cancel reservation for book #{book.id} (reservation ID not found)"
+        )
+        return
+
+    @staticmethod
+    def _parse_active_loan(loan_el: Tag, *, index: int = -1) -> Optional[MLOLLoan]:
+        loan_id = book_id = None
+        if loan_id_element := loan_el.find(
+            "a", attrs={"href": re.compile(r"(?<=idp=)\d+$")}
+        ):
+            loan_id = re.search(r"(?<=\=)\d+$", loan_id_element.attrs["href"]).group()
+        else:
+            logging.error(f"Could not find loan ID for loan #{index + 1}")
+            return
+
+        if book_id_element := loan_el.find(
+            "a", attrs={"href": re.compile(r"(?<=scheda.aspx\?id=)\d+$")}
+        ):
+            book_id = re.search(r"(?<=\=)\d+$", book_id_element.attrs["href"]).group()
+        else:
+            logging.error(f"Could not find book ID for loan #{index + 1}")
+            return
+
+        loan = MLOLLoan(id=loan_id, book_id=book_id)
+
+        if book_title_el := loan_el.select_one("div > div > h3"):
+            loan.book = MLOLBook(id=book_id, title=book_title_el.text.strip())
+
+        if authors_el := loan_el.find("span", attrs={"itemprop": "author"}):
+            loan.book.authors = [a.strip() for a in authors_el.text.strip().split(";")]
+
+        # TODO fetch other info
+        return loan
+
+    @staticmethod
+    def _parse_reservation(
+        reservation_el: Tag, *, index: int = -1
+    ) -> Optional[MLOLReservation]:
+        reservation_id = book_id = None
+        if reservation_id_element := reservation_el.find(
+            "a", attrs={"href": re.compile(r"(?<=annullaPr.aspx\?id=)\d+$")}
+        ):
+            reservation_id = re.search(
+                r"(?<=\=)\d+$", reservation_id_element.attrs["href"]
+            ).group()
+        else:
+            logging.error(f"Could not find loan ID for reservation #{index + 1}")
+            return
+
+        if book_id_element := reservation_el.find(
+            "a", attrs={"href": re.compile(r"(?<=scheda.aspx\?id=)\d+$")}
+        ):
+            book_id = re.search(r"(?<=\=)\d+$", book_id_element.attrs["href"]).group()
+        else:
+            logging.error(f"Could not find book ID for reservation #{index + 1}")
+            return
+
+        reservation = MLOLReservation(id=reservation_id, book_id=book_id)
+
+        if book_title_el := reservation_el.select_one("div > div > h3"):
+            reservation.book = MLOLBook(id=book_id, title=book_title_el.text.strip())
+
+        if authors_el := reservation_el.find("span", attrs={"itemprop": "author"}):
+            reservation.book.authors = [
+                a.strip() for a in authors_el.text.strip().split(";")
+            ]
+
+        # TODO fetch other info
+        return reservation
+
+    def get_resources(self, *, deep=False) -> dict:
+        # TODO support old, inactive loans
+        active_loans = []
+        reservations = []
+        response = self.session.request("GET", ENDPOINTS["resources"])
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        if active_loans_el := soup.select_one("#mlolloan"):
+            for i, loan_el in enumerate(active_loans_el.select("div.bottom-buffer")):
+                loan = self._parse_active_loan(loan_el, index=i)
+                if deep:
+                    loan.book = self.get_book_by_id(loan.book_id)
+                active_loans.append(loan)
+
+        if reservations_el := soup.select_one("#mlolreservation"):
+            for i, reservation_el in enumerate(
+                reservations_el.select("div.bottom-buffer")
+            ):
+                reservation = self._parse_reservation(reservation_el, index=i)
+                if deep:
+                    reservation.book = self.get_book_by_id(reservation.book_id)
+                reservations.append(reservation)
+
+        return {
+            "active_loans": [l for l in active_loans if l is not None],
+            "reservations": [r for r in reservations if r is not None],
+        }
