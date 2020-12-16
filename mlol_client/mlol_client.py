@@ -1,5 +1,6 @@
 import logging
 import re
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, List, Generator
 
@@ -35,19 +36,19 @@ class MLOLBook:
     def __init__(
         self,
         *,
-        id,
-        title,
-        authors=None,
-        status=None,
-        publisher=None,
-        ISBNs=None,
-        language=None,
-        description=None,
-        year=None,
-        formats=None,
-        drm=None,
+        id: str,
+        title: str,
+        authors: str = None,
+        status: str = None,
+        publisher: str = None,
+        ISBNs: List[str] = None,
+        language: str = None,
+        description: str = None,
+        year: int = None,
+        formats: List[str] = None,
+        drm: bool = None,
     ):
-        self.id = id
+        self.id = str(id)
         self.title = title
         self.authors = authors
         self.status = status
@@ -119,7 +120,8 @@ class MLOLClient:
         browser.submit_form(form)
         return browser.session.cookies
 
-    def _parse_search_page(self, page: Tag) -> List[MLOLBook]:
+    @staticmethod
+    def _parse_search_page(page: Tag) -> List[MLOLBook]:
         books = []
         for i, book in enumerate(page.select(".result-item")):
             try:
@@ -127,7 +129,7 @@ class MLOLClient:
                 title = book.find("h4").attrs["title"]
                 url = book.find("a").attrs["href"]
                 id = re.search(ID_RE, url).group()
-            except Exception as e:
+            except:
                 logging.error(f"Could not parse ID or title. Skipping book #{i+1}...")
                 continue
 
@@ -154,7 +156,7 @@ class MLOLClient:
 
         return books
 
-    def _parse_book_status(self, status: str) -> str:
+    def _parse_book_status(self, status: str) -> Optional[str]:
         status = status.strip().lower()
         if "scarica" in status:
             return "available"
@@ -167,52 +169,52 @@ class MLOLClient:
         return None
 
     def _parse_book_page(self, page: Tag) -> dict:
-        title = (
-            authors
-        ) = publisher = ISBNs = status = description = language = year = None
+        book_data = defaultdict(lambda: None)
+
+        if title := page.select_one(".book-title"):
+            book_data["title"] = title.text.strip()
+
+        if authors := page.select_one(".authors_title"):
+            book_data["authors"] = [a.strip() for a in authors.text.strip().split(";")]
+
+        if publisher := page.select_one(".publisher_title > span > a"):
+            book_data["publisher"] = publisher.text.strip()
+
+        if ISBNs := page.find_all(attrs={"itemprop": "isbn"}):
+            book_data["ISBNs"] = [i.text.strip() for i in ISBNs]
+
+        if status_element := page.select_one(".panel-mlol"):
+            book_data["status"] = self._parse_book_status(status_element.text.strip())
+
+        if description := next(
+            filter(
+                lambda x: hasattr(x, "text"),
+                page.find("div", attrs={"itemprop": "description"}),
+            )
+        ):
+            book_data["description"] = description.text.strip()
+
+        if language := page.find("span", attrs={"itemprop": "inLanguage"}):
+            book_data["language"] = language.text.strip()
+
+        if year := page.find("span", attrs={"itemprop": "datePublished"}):
+            book_data["year"] = int(year.text.strip())
 
         try:
-            title = page.select_one(".book-title").text.strip()
-            authors = [
-                a.strip()
-                for a in page.select_one(".authors_title").text.strip().split(";")
-            ]
-            publisher = page.select_one(".publisher_title > span > a").text.strip()
-            ISBNs = [i.text.strip() for i in page.find_all(attrs={"itemprop": "isbn"})]
-            status = self._parse_book_status(page.select(".panel-mlol")[0].text.strip())
-            description = next(
-                filter(
-                    lambda x: hasattr(x, "text"),
-                    page.find("div", attrs={"itemprop": "description"}),
-                )
-            ).text.strip()
-            language = page.find("span", attrs={"itemprop": "inLanguage"}).text.strip()
-            year = int(
-                page.find("span", attrs={"itemprop": "datePublished"}).text.strip()
-            )
             # e.g. "EPUB/PDF con DRM Adobe"
             formats_str = (
                 page.find("b", text=re.compile("FORMATO"))
                 .parent.parent.find("span")
                 .text.strip()
             )
-            drm = "drm" in formats_str.lower()
-        except (AttributeError, IndexError) as e:
-            # silently fail if we can't get specific values -- not all books have them
-            pass
+            book_data["drm"] = "drm" in formats_str.lower()
+            book_data["formats"] = [
+                f.strip().lower() for f in formats_str.split()[0].split("/")
+            ]
+        except:
+            logging.warning(f"Failed to parse formats for book {book_data['title']}")
 
-        return {
-            "title": title,
-            "authors": authors,
-            "publisher": publisher,
-            "ISBNs": ISBNs,
-            "status": status,
-            "description": description,
-            "language": language,
-            "year": year,
-            "formats": [f.strip().lower() for f in formats_str.split()[0].split("/")],
-            "drm": drm,
-        }
+        return book_data
 
     def _redownload_owned_book(self, book_id: str) -> Response:
         response = self.session.request("GET", url=ENDPOINTS["resources"])
@@ -342,7 +344,7 @@ class MLOLClient:
                 if pages == 1
                 else self.session.request(
                     method="GET",
-                    endpoint=ENDPOINTS["search"],
+                    url=ENDPOINTS["search"],
                     params={**req_params, **{"page": i}},
                 )
             )
