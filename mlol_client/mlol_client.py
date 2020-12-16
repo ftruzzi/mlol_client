@@ -29,6 +29,8 @@ ENDPOINTS = {
     "get_book": "/media/scheda.aspx",
     "redownload": "/help/dlrepeat.aspx",
     "download": "/media/downloadebadok.aspx",
+    "pre_reserve": "/media/prenota.aspx",
+    "reserve": "/media/prenota2.aspx",
 }
 
 
@@ -162,6 +164,8 @@ class MLOLClient:
             return "available"
         if "ripeti" in status:
             return "owned"
+        if "prenotato" in status:
+            return "reserved"
         if "occupato" in status:
             return "taken"
         if "non disponibile" in status:
@@ -304,8 +308,8 @@ class MLOLClient:
                 headers={
                     **self.session.headers,
                     **{
-                        "Host": self.session.base_url.lstrip("https://"),
-                        "Referer": f"{self.session.base_url}/media/downloadebad2.aspx&unid={book_id}&form=epub",
+                        "Host": self.session.base_url.replace("https://", ""),
+                        "Referer": f"{self.session.base_url}/media/downloadebad2.aspx?unid={book_id}&form=epub",
                     },
                 },
                 params={"unid": book_id, "form": "epub"},
@@ -361,7 +365,6 @@ class MLOLClient:
         self, query: str, *, deep: bool = False
     ) -> Generator[List[MLOLBook], None, None]:
         params = {"seltip": 310, "keywords": query.strip(), "nris": 48}
-
         response = self.session.request("GET", url=ENDPOINTS["search"], params=params)
         soup = BeautifulSoup(response.text, "html.parser")
 
@@ -378,7 +381,6 @@ class MLOLClient:
         self, *, deep: bool = False
     ) -> Generator[List[MLOLBook], None, None]:
         params = {"seltip": 310, "news": "15day", "nris": 48}
-
         response = self.session.request("GET", url=ENDPOINTS["search"], params=params)
         soup = BeautifulSoup(response.text, "html.parser")
 
@@ -396,3 +398,51 @@ class MLOLClient:
 
     def get_book_url(self, book: MLOLBook) -> str:
         return self.get_book_url_by_id(book.id)
+
+    def reserve_book_by_id(self, book_id: str, *, email: str) -> Optional[bool]:
+        if not self.session.cookies.get(".ASPXAUTH"):
+            logging.error(
+                "You need to be authenticated to MLOL in order to download books."
+            )
+            return
+
+        book = self.get_book_by_id(book_id)
+        if book.status != "taken":
+            logging.error(
+                f"You can only reserve taken books. Book status: {book.status}"
+            )
+
+        headers = {
+            **self.session.headers,
+            **{
+                "Host": self.session.base_url.replace("https://", ""),
+                "Referer": f"{self.session.base_url}{ENDPOINTS['pre_reserve']}?id={book_id}",
+                "Accept": "text/html, */*; q=0.01",
+            },
+        }
+
+        response = self.session.request(
+            "GET",
+            # don't pass params, build the URL directly to avoid percent encoding
+            url=f"{ENDPOINTS['reserve']}?id={book_id}&email={email}",
+            headers=headers,
+        )
+        soup = BeautifulSoup(response.text, "html.parser")
+        if outcome := soup.select_one("#lblInfo"):
+            message = outcome.text.strip().lower()
+            if "con successo" in message:
+                return True
+            elif "prenotazione attiva" in message:
+                logging.warning(
+                    f"You already have an active reservation for book #{book_id}"
+                )
+                return True
+            else:
+                logging.error(f"Failed to reserve book #{book_id}")
+                return False
+
+        logging.error(f"Failed to reserve book with ID {book_id} (unknown outcome)")
+
+    def reserve_book(self, book: MLOLBook, *, email: str) -> bool:
+        return self.reserve_book_by_id(book.id, email=email)
+
