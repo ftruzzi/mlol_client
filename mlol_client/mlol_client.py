@@ -33,6 +33,7 @@ ENDPOINTS = {
     "pre_reserve": "/media/prenota.aspx",
     "reserve": "/media/prenota2.aspx",
     "cancel_reservation": "/media/annullaPr.aspx",
+    "get_queue_position": "/commons/QueuePos.aspx",
 }
 
 
@@ -160,6 +161,20 @@ class MLOLClient:
         browser.submit_form(form)
         return browser.session.cookies
 
+    def _get_queue_position(self, reservation_id: str) -> Optional[int]:
+        params = {"id": reservation_id}
+        response = self.session.request(
+            "GET", url=ENDPOINTS["_get_queue_position"], params=params
+        )
+
+        if "in coda" in response.text and (
+            queue_position := re.search(r"\d+(?=°)", response.text)
+        ):
+            return int(queue_position.group())
+
+        logging.error(f"Failed to get queue position for reservation #{reservation_id}")
+        return
+
     @staticmethod
     def _parse_search_page(page: Tag) -> List[MLOLBook]:
         books = []
@@ -196,7 +211,8 @@ class MLOLClient:
 
         return books
 
-    def _parse_book_status(self, status: str) -> Optional[str]:
+    @staticmethod
+    def _parse_book_status(status: str) -> Optional[str]:
         status = status.strip().lower()
         if "scarica" in status:
             return "available"
@@ -210,6 +226,7 @@ class MLOLClient:
             return "unavailable"
         return None
 
+    @staticmethod
     def _parse_book_page(self, page: Tag) -> dict:
         book_data = defaultdict(lambda: None)
 
@@ -226,7 +243,9 @@ class MLOLClient:
             book_data["ISBNs"] = [i.text.strip() for i in ISBNs]
 
         if status_element := page.select_one(".panel-mlol"):
-            book_data["status"] = self._parse_book_status(status_element.text.strip())
+            book_data["status"] = MLOLClient._parse_book_status(
+                status_element.text.strip()
+            )
 
         if description := next(
             filter(
@@ -258,6 +277,84 @@ class MLOLClient:
 
         return book_data
 
+    @staticmethod
+    def _parse_active_loan(loan_el: Tag, *, index: int = -1) -> Optional[MLOLLoan]:
+        loan_id = book_id = None
+        if loan_id_element := loan_el.find(
+            "a", attrs={"href": re.compile(r"(?<=idp=)\d+$")}
+        ):
+            loan_id = re.search(r"(?<=\=)\d+$", loan_id_element.attrs["href"]).group()
+        else:
+            logging.error(f"Could not find loan ID for loan #{index + 1}")
+            return
+
+        if book_id_element := loan_el.find(
+            "a", attrs={"href": re.compile(r"(?<=scheda.aspx\?id=)\d+$")}
+        ):
+            book_id = re.search(r"(?<=\=)\d+$", book_id_element.attrs["href"]).group()
+        else:
+            logging.error(f"Could not find book ID for loan #{index + 1}")
+            return
+
+        loan = MLOLLoan(id=loan_id, book_id=book_id)
+
+        if book_title_el := loan_el.select_one("div > div > h3"):
+            loan.book = MLOLBook(id=book_id, title=book_title_el.text.strip())
+
+        if authors_el := loan_el.find("span", attrs={"itemprop": "author"}):
+            loan.book.authors = [a.strip() for a in authors_el.text.strip().split(";")]
+
+        # TODO fetch other info
+        return loan
+
+    @staticmethod
+    def _parse_reservation(
+        reservation_el: Tag, *, index: int = -1
+    ) -> Optional[MLOLReservation]:
+        reservation_id = book_id = None
+        if reservation_id_element := reservation_el.find(
+            "a", attrs={"href": re.compile(r"(?<=annullaPr.aspx\?id=)\d+$")}
+        ):
+            reservation_id = re.search(
+                r"(?<=\=)\d+$", reservation_id_element.attrs["href"]
+            ).group()
+        else:
+            logging.error(f"Could not find loan ID for reservation #{index + 1}")
+            return
+
+        if book_id_element := reservation_el.find(
+            "a", attrs={"href": re.compile(r"(?<=scheda.aspx\?id=)\d+$")}
+        ):
+            book_id = re.search(r"(?<=\=)\d+$", book_id_element.attrs["href"]).group()
+        else:
+            logging.error(f"Could not find book ID for reservation #{index + 1}")
+            return
+
+        reservation = MLOLReservation(id=reservation_id, book_id=book_id)
+
+        if book_title_el := reservation_el.select_one("div > div > h3"):
+            reservation.book = MLOLBook(id=book_id, title=book_title_el.text.strip())
+
+        if authors_el := reservation_el.find("span", attrs={"itemprop": "author"}):
+            reservation.book.authors = [
+                a.strip() for a in authors_el.text.strip().split(";")
+            ]
+
+        table_els = reservation_el.select("tr")
+        datetime_els = [c for c in table_els[0] if c != "\n"]
+        status_els = [c for c in table_els[1] if c != "\n"]
+        if datetime_els and len(datetime_els) >= 3:
+            date = datetime_els[1].text.strip()
+            time = datetime_els[2].text.strip()
+            reservation.date = datetime.strptime(f"{date} {time}", "%d/%m/%Y %H:%M")
+
+        if status_els and len(status_els) >= 2:
+            # TODO discover more statuses
+            if status_els[1].find("b").text.strip() == "attiva":
+                reservation.status = "active"
+
+        return reservation
+
     def _redownload_owned_book(self, book_id: str) -> Response:
         active_loans = self.get_resources()["active_loans"]
         if loan_id := next((l.id for l in active_loans if l.book_id == book_id), None):
@@ -278,6 +375,33 @@ class MLOLClient:
 
         logging.error(f"Failed to find owned book {book_id} in your profile")
         raise
+
+    def _search_books_paginated(
+        self,
+        *,
+        req_params: dict,
+        pages: int,
+        deep: bool = False,
+        first_response: Response = None,
+    ) -> Generator[List[MLOLBook], None, None]:
+        for i in range(1, pages + 1):
+            response = (
+                first_response
+                if pages == 1
+                else self.session.request(
+                    method="GET",
+                    url=ENDPOINTS["search"],
+                    params={**req_params, **{"page": i}},
+                )
+            )
+            books = self._parse_search_page(BeautifulSoup(response.text, "html.parser"))
+            if deep:
+                with ThreadPoolExecutor(
+                    max_workers=min(len(books), self.max_threads)
+                ) as executor:
+                    yield list(executor.map(self.get_book_by_id, (b.id for b in books)))
+            else:
+                yield books
 
     def get_book_by_id(self, book_id: str) -> Optional[MLOLBook]:
         logging.debug(f"Fetching book {book_id}")
@@ -366,65 +490,6 @@ class MLOLClient:
             raise ValueError(f"Expected MLOLBook, got {type(book)}")
 
         return self.download_book_by_id(book.id)
-
-    def _search_books_paginated(
-        self,
-        *,
-        req_params: dict,
-        pages: int,
-        deep: bool = False,
-        first_response: Response = None,
-    ) -> Generator[List[MLOLBook], None, None]:
-        for i in range(1, pages + 1):
-            response = (
-                first_response
-                if pages == 1
-                else self.session.request(
-                    method="GET",
-                    url=ENDPOINTS["search"],
-                    params={**req_params, **{"page": i}},
-                )
-            )
-            books = self._parse_search_page(BeautifulSoup(response.text, "html.parser"))
-            if deep:
-                with ThreadPoolExecutor(
-                    max_workers=min(len(books), self.max_threads)
-                ) as executor:
-                    yield list(executor.map(self.get_book_by_id, (b.id for b in books)))
-            else:
-                yield books
-
-    def search_books(
-        self, query: str, *, deep: bool = False
-    ) -> Generator[List[MLOLBook], None, None]:
-        params = {"seltip": 310, "keywords": query.strip(), "nris": 48}
-        response = self.session.request("GET", url=ENDPOINTS["search"], params=params)
-        soup = BeautifulSoup(response.text, "html.parser")
-
-        try:
-            pages = int(soup.select_one("#pager").attrs["data-pages"])
-        except AttributeError:
-            pages = 1
-
-        return self._search_books_paginated(
-            req_params=params, deep=deep, pages=pages, first_response=response
-        )
-
-    def get_latest_books(
-        self, *, deep: bool = False
-    ) -> Generator[List[MLOLBook], None, None]:
-        params = {"seltip": 310, "news": "15day", "nris": 48}
-        response = self.session.request("GET", url=ENDPOINTS["search"], params=params)
-        soup = BeautifulSoup(response.text, "html.parser")
-
-        try:
-            pages = int(soup.select_one("#pager").attrs["data-pages"])
-        except AttributeError:
-            pages = 1
-
-        return self._search_books_paginated(
-            req_params=params, deep=deep, pages=pages, first_response=response
-        )
 
     def get_book_url_by_id(self, book_id: str) -> str:
         return f"{self.session.base_url}{ENDPOINTS['get_book']}?id={book_id}"
@@ -541,72 +606,6 @@ class MLOLClient:
         )
         return
 
-    @staticmethod
-    def _parse_active_loan(loan_el: Tag, *, index: int = -1) -> Optional[MLOLLoan]:
-        loan_id = book_id = None
-        if loan_id_element := loan_el.find(
-            "a", attrs={"href": re.compile(r"(?<=idp=)\d+$")}
-        ):
-            loan_id = re.search(r"(?<=\=)\d+$", loan_id_element.attrs["href"]).group()
-        else:
-            logging.error(f"Could not find loan ID for loan #{index + 1}")
-            return
-
-        if book_id_element := loan_el.find(
-            "a", attrs={"href": re.compile(r"(?<=scheda.aspx\?id=)\d+$")}
-        ):
-            book_id = re.search(r"(?<=\=)\d+$", book_id_element.attrs["href"]).group()
-        else:
-            logging.error(f"Could not find book ID for loan #{index + 1}")
-            return
-
-        loan = MLOLLoan(id=loan_id, book_id=book_id)
-
-        if book_title_el := loan_el.select_one("div > div > h3"):
-            loan.book = MLOLBook(id=book_id, title=book_title_el.text.strip())
-
-        if authors_el := loan_el.find("span", attrs={"itemprop": "author"}):
-            loan.book.authors = [a.strip() for a in authors_el.text.strip().split(";")]
-
-        # TODO fetch other info
-        return loan
-
-    @staticmethod
-    def _parse_reservation(
-        reservation_el: Tag, *, index: int = -1
-    ) -> Optional[MLOLReservation]:
-        reservation_id = book_id = None
-        if reservation_id_element := reservation_el.find(
-            "a", attrs={"href": re.compile(r"(?<=annullaPr.aspx\?id=)\d+$")}
-        ):
-            reservation_id = re.search(
-                r"(?<=\=)\d+$", reservation_id_element.attrs["href"]
-            ).group()
-        else:
-            logging.error(f"Could not find loan ID for reservation #{index + 1}")
-            return
-
-        if book_id_element := reservation_el.find(
-            "a", attrs={"href": re.compile(r"(?<=scheda.aspx\?id=)\d+$")}
-        ):
-            book_id = re.search(r"(?<=\=)\d+$", book_id_element.attrs["href"]).group()
-        else:
-            logging.error(f"Could not find book ID for reservation #{index + 1}")
-            return
-
-        reservation = MLOLReservation(id=reservation_id, book_id=book_id)
-
-        if book_title_el := reservation_el.select_one("div > div > h3"):
-            reservation.book = MLOLBook(id=book_id, title=book_title_el.text.strip())
-
-        if authors_el := reservation_el.find("span", attrs={"itemprop": "author"}):
-            reservation.book.authors = [
-                a.strip() for a in authors_el.text.strip().split(";")
-            ]
-
-        # TODO fetch other info
-        return reservation
-
     def get_resources(self, *, deep=False) -> dict:
         # TODO support old, inactive loans
         active_loans = []
@@ -626,6 +625,7 @@ class MLOLClient:
                 reservations_el.select("div.bottom-buffer")
             ):
                 reservation = self._parse_reservation(reservation_el, index=i)
+                reservation.queue_position = self._get_queue_position(reservation.id)
                 if deep:
                     reservation.book = self.get_book_by_id(reservation.book_id)
                 reservations.append(reservation)
@@ -634,3 +634,35 @@ class MLOLClient:
             "active_loans": [l for l in active_loans if l is not None],
             "reservations": [r for r in reservations if r is not None],
         }
+
+    def search_books(
+        self, query: str, *, deep: bool = False
+    ) -> Generator[List[MLOLBook], None, None]:
+        params = {"seltip": 310, "keywords": query.strip(), "nris": 48}
+        response = self.session.request("GET", url=ENDPOINTS["search"], params=params)
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        try:
+            pages = int(soup.select_one("#pager").attrs["data-pages"])
+        except AttributeError:
+            pages = 1
+
+        return self._search_books_paginated(
+            req_params=params, deep=deep, pages=pages, first_response=response
+        )
+
+    def get_latest_books(
+        self, *, deep: bool = False
+    ) -> Generator[List[MLOLBook], None, None]:
+        params = {"seltip": 310, "news": "15day", "nris": 48}
+        response = self.session.request("GET", url=ENDPOINTS["search"], params=params)
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        try:
+            pages = int(soup.select_one("#pager").attrs["data-pages"])
+        except AttributeError:
+            pages = 1
+
+        return self._search_books_paginated(
+            req_params=params, deep=deep, pages=pages, first_response=response
+        )
