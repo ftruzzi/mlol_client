@@ -79,18 +79,24 @@ class MLOLReservation:
         self,
         *,
         id: str,
-        book_id: str,
-        book: MLOLBook = None,
+        book: MLOLBook,
         date: datetime = None,
         status: str = None,
         queue_position: int = None,
     ):
         self.id = str(id)
-        self.book_id = book_id
         self.book = book
         self.date = date
         self.status = status
         self.queue_position = queue_position
+
+    def __repr__(self):
+        values = {
+            k: "{}{}".format(str(v)[:50], "..." if len(str(v)) > 50 else "")
+            for k, v in self.__dict__.items()
+            if v is not None
+        }
+        return f"<mlol_client.MLOLReservation: {values}>"
 
 
 class MLOLLoan:
@@ -98,16 +104,22 @@ class MLOLLoan:
         self,
         *,
         id: str,
-        book_id: str,
-        book: MLOLBook = None,
+        book: MLOLBook,
         start_date: datetime = None,
         end_date: datetime = None,
     ):
         self.id = str(id)
-        self.book_id = book_id
         self.book = book
         self.start_date = start_date
         self.end_date = end_date
+
+    def __repr__(self):
+        values = {
+            k: "{}{}".format(str(v)[:50], "..." if len(str(v)) > 50 else "")
+            for k, v in self.__dict__.items()
+            if v is not None
+        }
+        return f"<mlol_client.MLOLLoan: {values}>"
 
 
 class MLOLClient:
@@ -164,7 +176,7 @@ class MLOLClient:
     def _get_queue_position(self, reservation_id: str) -> Optional[int]:
         params = {"id": reservation_id}
         response = self.session.request(
-            "GET", url=ENDPOINTS["_get_queue_position"], params=params
+            "GET", url=ENDPOINTS["get_queue_position"], params=params
         )
 
         if "in coda" in response.text and (
@@ -227,7 +239,7 @@ class MLOLClient:
         return None
 
     @staticmethod
-    def _parse_book_page(self, page: Tag) -> dict:
+    def _parse_book_page(page: Tag) -> dict:
         book_data = defaultdict(lambda: None)
 
         if title := page.select_one(".book-title"):
@@ -296,15 +308,31 @@ class MLOLClient:
             logging.error(f"Could not find book ID for loan #{index + 1}")
             return
 
-        loan = MLOLLoan(id=loan_id, book_id=book_id)
+        loan = MLOLLoan(id=loan_id, book=MLOLBook(id=book_id, title=""))
 
         if book_title_el := loan_el.select_one("div > div > h3"):
-            loan.book = MLOLBook(id=book_id, title=book_title_el.text.strip())
+            loan.book.title = book_title_el.text.strip()
 
         if authors_el := loan_el.find("span", attrs={"itemprop": "author"}):
             loan.book.authors = [a.strip() for a in authors_el.text.strip().split(";")]
 
-        # TODO fetch other info
+        table_els = loan_el.select("tr")
+        start_date_els = [c for c in table_els[0] if c != "\n"]
+        end_date_els = [c for c in table_els[1] if c != "\n"]
+        if start_date_els and len(start_date_els) >= 3:
+            start_date = start_date_els[1].text.strip()
+            start_time = start_date_els[2].text.strip()
+            loan.start_date = datetime.strptime(
+                f"{start_date} {start_time}", "%d/%m/%Y %H:%M"
+            )
+
+        if end_date_els and len(end_date_els) >= 3:
+            end_date = end_date_els[1].text.strip()
+            end_time = end_date_els[2].text.strip()
+            loan.end_date = datetime.strptime(
+                f"{end_date} {end_time}", "%d/%m/%Y %H:%M"
+            )
+
         return loan
 
     @staticmethod
@@ -330,10 +358,12 @@ class MLOLClient:
             logging.error(f"Could not find book ID for reservation #{index + 1}")
             return
 
-        reservation = MLOLReservation(id=reservation_id, book_id=book_id)
+        reservation = MLOLReservation(
+            id=reservation_id, book=MLOLBook(id=book_id, title="")
+        )
 
         if book_title_el := reservation_el.select_one("div > div > h3"):
-            reservation.book = MLOLBook(id=book_id, title=book_title_el.text.strip())
+            reservation.book.title = book_title_el.text.strip()
 
         if authors_el := reservation_el.find("span", attrs={"itemprop": "author"}):
             reservation.book.authors = [
