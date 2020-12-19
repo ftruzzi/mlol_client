@@ -89,6 +89,7 @@ class MLOLBook:
         year: int = None,
         formats: List[str] = None,
         drm: bool = None,
+        download_url: str = None,
     ):
         self.id = str(id)
         self.title = title
@@ -101,6 +102,7 @@ class MLOLBook:
         self.year = year
         self.formats = formats
         self.drm = drm
+        self.download_url = download_url
 
     def __repr__(self):
         values = {
@@ -144,13 +146,11 @@ class MLOLLoan:
         book: MLOLBook,
         start_date: datetime = None,
         end_date: datetime = None,
-        download_url: str = None,
     ):
         self.id = str(id)
         self.book = book
         self.start_date = start_date
         self.end_date = end_date
-        self.download_url = download_url
 
     def __repr__(self):
         values = {
@@ -180,6 +180,8 @@ class MLOLApiConverter:
             formats=[f.strip().lower()
                      for f in api_response["dc_format"].split()[0].split("/")],
             drm="drm" in api_response["dc_format"].lower(),
+            download_url=None if "url_download" not in api_response else api_response[
+                "url_download"]
         )
 
     def get_reservation(api_response) -> MLOLReservation:
@@ -197,7 +199,6 @@ class MLOLApiConverter:
             book=MLOLApiConverter.get_book(api_response),
             start_date=MLOLApiConverter.get_date(api_response["acquired"]),
             end_date=MLOLApiConverter.get_date(api_response["expired"]),
-            download_url=api_response["url_download"]
         )
 
     def get_user(api_response) -> MLOLUser:
@@ -662,7 +663,7 @@ class MLOLClient:
             raise ValueError(f"Expected MLOLBook, got {type(book)}")
 
         if book.download_url is not None:
-            return requests.get(book.downlaod_url).content
+            return requests.get(book.download_url).content
 
         return self.download_book_by_id(book.id)
 
