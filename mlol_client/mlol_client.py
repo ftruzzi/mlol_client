@@ -569,9 +569,7 @@ class MLOLClient:
                     reservation.book = self.get_book_by_id(reservation.book.id)
                 reservations.append(reservation)
 
-        return {
-            "reservations": [r for r in reservations if r is not None],
-        }
+        return [r for r in reservations if r is not None]
 
     def get_book_by_id(self, book_id: str) -> Optional[MLOLBook]:
         logging.debug(f"Fetching book {book_id}")
