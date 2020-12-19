@@ -18,7 +18,7 @@ DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.
 DEFAULT_HEADERS = {
     "User-Agent": DEFAULT_USER_AGENT,
     "Upgrade-Insecure-Requests": "1",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q = 0.9,image/avif,image/webp,image/apng,*/*;q = 0.8,application/signed-exchange;v = b3;q = 0.9",
     "Sec-Fetch-Site": "same-origin",
     "Sec-Fetch-Mode": "navigate",
     "Sec-Fetch-User": "?1",
@@ -38,6 +38,7 @@ ENDPOINTS = {
     "api": {
         "login": "https://api.medialibrary.it/app/login",
         "portals": "https://api.medialibrary.it/app/portals",
+        "loans_history": "https://api.medialibrary.it/app/loanhistory",
     },
 }
 
@@ -112,11 +113,13 @@ class MLOLLoan:
         book: MLOLBook,
         start_date: datetime = None,
         end_date: datetime = None,
+        download_url: str = download_url,
     ):
         self.id = str(id)
         self.book = book
         self.start_date = start_date
         self.end_date = end_date
+        self.download_url = download_url
 
     def __repr__(self):
         values = {
@@ -125,6 +128,45 @@ class MLOLLoan:
             if v is not None
         }
         return f"<mlol_client.MLOLLoan: {values}>"
+
+
+class MLOLApiConverter:
+    def get_date(date: str) -> datetime:
+        # Convert 2020-12-20 into a datetime
+        return datetime.strptime(date, "%Y-%m-%d")
+
+    def get_book(api_response) -> MLOLBook:
+        return MLOLBook(
+            str(api_response["id"]),
+            api_response["dc_title"],
+            authors=api_response["dc_creator"],
+            # status = None, I don't insert the status here...
+            publisher=api_response["dc_source"],
+            ISBNs=api_response["isbn"],
+            # language = None, The API doesn't tell me this
+            description=api_response["dc_description"],
+            year=api_response["pubdate"].split('-')[0],
+            formats=f.strip().lower() for f in api_response["dc_format"].split()[0].split("/"),
+            drm="drm" in api_response["dc_format"].lower,
+        )
+
+    def get_reservation(api_response) -> MLOLReservation:
+        return MLOLReservation(
+            None,
+            self.get_book(api_response),
+            date=this.get_date(api_response["inserted"])
+            # status = api_response["status"] # Is 'attiva' a correct value? I don't think so... shouldn't it always be 'reserved'?
+            # As for the queue position, we don't know and this will be a problem since we cannot get the queue position...
+        )
+
+    def get_loan(api_response) -> MLOLLoan:
+        return MLOLLoan(
+            None,  # The API doesn't care about IDs...
+            self.get_book(api_response),
+            start_date=this.get_date(api_response["acquired"]),
+            end_date=this.get_date(api_response["expired"]),
+            download_url=api_response["url_download"]
+        )
 
 
 class MLOLClient:
@@ -676,7 +718,7 @@ class MLOLClient:
         )
         return
 
-    def get_resources(self, *, deep=False) -> dict:
+    def get_resources(self, *, more_info=False) -> dict:
         # TODO support old, inactive loans
         active_loans = []
         reservations = []
