@@ -162,10 +162,12 @@ class MLOLLoan:
 
 
 class MLOLApiConverter:
+    @staticmethod
     def get_date(date: str) -> datetime:
         # Convert 2020-12-20 into a datetime
         return datetime.strptime(date, "%Y-%m-%d")
 
+    @staticmethod
     def get_book(api_response) -> MLOLBook:
         return MLOLBook(
             id=str(api_response["id"]),
@@ -184,6 +186,7 @@ class MLOLApiConverter:
                 "url_download"]
         )
 
+    @staticmethod
     def get_reservation(api_response) -> MLOLReservation:
         return MLOLReservation(
             id=None,
@@ -193,6 +196,7 @@ class MLOLApiConverter:
             # As for the queue position, we don't know and this will be a problem since we cannot get the queue position...
         )
 
+    @staticmethod
     def get_loan(api_response) -> MLOLLoan:
         return MLOLLoan(
             id=None,  # The API doesn't care about IDs...
@@ -201,6 +205,7 @@ class MLOLApiConverter:
             end_date=MLOLApiConverter.get_date(api_response["expired"]),
         )
 
+    @staticmethod
     def get_user(api_response) -> MLOLUser:
         return MLOLUser(api_response["userid"],
                         api_response["firstname"],
