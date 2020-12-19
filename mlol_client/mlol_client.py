@@ -49,7 +49,6 @@ ENDPOINTS = {
 class MLOLUser:
     def __init__(
         self,
-        *,
         id: int,
         name: str,
         surname: str,
@@ -145,7 +144,7 @@ class MLOLLoan:
         book: MLOLBook,
         start_date: datetime = None,
         end_date: datetime = None,
-        download_url: str = download_url,
+        download_url: str = None,
     ):
         self.id = str(id)
         self.book = book
@@ -178,7 +177,8 @@ class MLOLApiConverter:
             # language = None, The API doesn't tell me this
             description=api_response["dc_description"],
             year=api_response["pubdate"].split('-')[0],
-            formats=f.strip().lower() for f in api_response["dc_format"].split()[0].split("/"),
+            formats=[f.strip().lower()
+                     for f in api_response["dc_format"].split()[0].split("/")],
             drm="drm" in api_response["dc_format"].lower,
         )
 
@@ -201,13 +201,13 @@ class MLOLApiConverter:
         )
 
     def get_user(api_response) -> MLOLUser:
-        return MLOLUser(api_response["id"],
+        return MLOLUser(api_response["userid"],
                         api_response["firstname"],
                         api_response["lastname"],
                         api_response["username"],
                         int(api_response["ebook_loans_remaining"]),
                         int(api_response["ebook_loans_remaining"]),
-                        self.get_date(api_response["expires"])
+                        MLOLApiConverter.get_date(api_response["expires"])
                         )
 
 
