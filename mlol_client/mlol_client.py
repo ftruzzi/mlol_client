@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Optional, List, Generator
 
+import requests
 from bs4 import BeautifulSoup, Tag
 from requests.adapters import HTTPAdapter
 from requests.cookies import RequestsCookieJar
@@ -34,6 +35,10 @@ ENDPOINTS = {
     "reserve": "/media/prenota2.aspx",
     "cancel_reservation": "/media/annullaPr.aspx",
     "get_queue_position": "/commons/QueuePos.aspx",
+    "api": {
+        "login": "https://api.medialibrary.it/app/login",
+        "portals": "https://api.medialibrary.it/app/portals",
+    },
 }
 
 
@@ -125,22 +130,31 @@ class MLOLLoan:
 class MLOLClient:
     max_threads = 5
     session = None
+    # Token for the REST API
+    token = None
 
-    def __init__(self, *, domain=None, username=None, password=None):
-        self.session = sessions.BaseUrlSession(base_url="https://medialibrary.it")
+    def __init__(self, *, domain=None, username=None, password=None, library_id_or_name=None):
+        self.session = sessions.BaseUrlSession(
+            base_url="https://medialibrary.it")
         self.session.headers.update(DEFAULT_HEADERS)
 
-        if not (username and password and domain):
+        if not (username and password and domain and library_id_or_name):
             logging.warning(
                 "You did not provide authentication credentials and a subdomain. You will not be able to perform actions that require authentication."
             )
         else:
+            library_id = self._get_library_id_from_string(library_id_or_name)[
+                0]
             self.domain = domain
             self.username = username
             self.session.base_url = "https://" + re.sub(
                 r"https?(://)", "", domain.rstrip("/")
             )
-            self.session.cookies = self._get_auth_cookies(username, password)
+            self.session.cookies = self._get_auth_cookies(
+                username, password, str(library_id))
+            self.token = self._get_api_token(
+                username, password, str(library_id))
+            print(self)
 
         adapter = HTTPAdapter(
             max_retries=Retry(
@@ -162,16 +176,22 @@ class MLOLClient:
         values["password"] = "***"
         return f"<mlol_client.MLOLClient: {values}"
 
-    def _get_auth_cookies(self, username: str, password: str) -> RequestsCookieJar:
+    def _get_auth_cookies(self, username: str, password: str, library_id: str) -> RequestsCookieJar:
         # using RoboBrowser to avoid keeping a mapping of MLOL subdomains to their numeric IDs
         # a POST request including a "lente" param would be enough
-        browser = RoboBrowser(parser="html.parser", user_agent=DEFAULT_USER_AGENT)
+        browser = RoboBrowser(parser="html.parser",
+                              user_agent=DEFAULT_USER_AGENT)
         browser.open(f"{self.session.base_url}{ENDPOINTS['login']}")
         form = [f for f in browser.get_forms() if "lusername" in f.fields][0]
         form["lusername"] = username
         form["lpassword"] = password
+        if library_id is not None:
+            form["lente"] = library_id
         browser.submit_form(form)
         return browser.session.cookies
+
+    def _get_api_token(self, username: str, password: str, library_id: str) -> str:
+        return requests.post(ENDPOINTS["api"]["login"], data={"username": username, "password": password, "portal": library_id, "app_code": ""}).json()["token"]
 
     def _get_queue_position(self, reservation_id: str) -> Optional[int]:
         params = {"id": reservation_id}
@@ -184,8 +204,13 @@ class MLOLClient:
         ):
             return int(queue_position.group())
 
-        logging.error(f"Failed to get queue position for reservation #{reservation_id}")
+        logging.error(
+            f"Failed to get queue position for reservation #{reservation_id}")
         return
+
+    @staticmethod
+    def _get_library_id_from_string(search: str) -> List[int]:
+        return [i["id"] for i in requests.get(ENDPOINTS["api"]["portals"]).json() if str(i["id"]) == search or i["name"].find(search) != -1]
 
     @staticmethod
     def _parse_search_page(page: Tag) -> List[MLOLBook]:
@@ -197,7 +222,8 @@ class MLOLClient:
                 url = book.find("a").attrs["href"]
                 id = re.search(ID_RE, url).group()
             except:
-                logging.error(f"Could not parse ID or title. Skipping book #{i+1}...")
+                logging.error(
+                    f"Could not parse ID or title. Skipping book #{i+1}...")
                 continue
 
             try:
@@ -246,7 +272,8 @@ class MLOLClient:
             book_data["title"] = title.text.strip()
 
         if authors := page.select_one(".authors_title"):
-            book_data["authors"] = [a.strip() for a in authors.text.strip().split(";")]
+            book_data["authors"] = [a.strip()
+                                    for a in authors.text.strip().split(";")]
 
         if publisher := page.select_one(".publisher_title > span > a"):
             book_data["publisher"] = publisher.text.strip()
@@ -285,7 +312,8 @@ class MLOLClient:
                 f.strip().lower() for f in formats_str.split()[0].split("/")
             ]
         except:
-            logging.warning(f"Failed to parse formats for book {book_data['title']}")
+            logging.warning(
+                f"Failed to parse formats for book {book_data['title']}")
 
         return book_data
 
@@ -295,7 +323,8 @@ class MLOLClient:
         if loan_id_element := loan_el.find(
             "a", attrs={"href": re.compile(r"(?<=idp=)\d+$")}
         ):
-            loan_id = re.search(r"(?<=\=)\d+$", loan_id_element.attrs["href"]).group()
+            loan_id = re.search(
+                r"(?<=\=)\d+$", loan_id_element.attrs["href"]).group()
         else:
             logging.error(f"Could not find loan ID for loan #{index + 1}")
             return
@@ -303,7 +332,8 @@ class MLOLClient:
         if book_id_element := loan_el.find(
             "a", attrs={"href": re.compile(r"(?<=scheda.aspx\?id=)\d+$")}
         ):
-            book_id = re.search(r"(?<=\=)\d+$", book_id_element.attrs["href"]).group()
+            book_id = re.search(
+                r"(?<=\=)\d+$", book_id_element.attrs["href"]).group()
         else:
             logging.error(f"Could not find book ID for loan #{index + 1}")
             return
@@ -314,7 +344,8 @@ class MLOLClient:
             loan.book.title = book_title_el.text.strip()
 
         if authors_el := loan_el.find("span", attrs={"itemprop": "author"}):
-            loan.book.authors = [a.strip() for a in authors_el.text.strip().split(";")]
+            loan.book.authors = [a.strip()
+                                 for a in authors_el.text.strip().split(";")]
 
         table_els = loan_el.select("tr")
         start_date_els = [c for c in table_els[0] if c != "\n"]
@@ -347,15 +378,18 @@ class MLOLClient:
                 r"(?<=\=)\d+$", reservation_id_element.attrs["href"]
             ).group()
         else:
-            logging.error(f"Could not find loan ID for reservation #{index + 1}")
+            logging.error(
+                f"Could not find loan ID for reservation #{index + 1}")
             return
 
         if book_id_element := reservation_el.find(
             "a", attrs={"href": re.compile(r"(?<=scheda.aspx\?id=)\d+$")}
         ):
-            book_id = re.search(r"(?<=\=)\d+$", book_id_element.attrs["href"]).group()
+            book_id = re.search(
+                r"(?<=\=)\d+$", book_id_element.attrs["href"]).group()
         else:
-            logging.error(f"Could not find book ID for reservation #{index + 1}")
+            logging.error(
+                f"Could not find book ID for reservation #{index + 1}")
             return
 
         reservation = MLOLReservation(
@@ -376,7 +410,8 @@ class MLOLClient:
         if datetime_els and len(datetime_els) >= 3:
             date = datetime_els[1].text.strip()
             time = datetime_els[2].text.strip()
-            reservation.date = datetime.strptime(f"{date} {time}", "%d/%m/%Y %H:%M")
+            reservation.date = datetime.strptime(
+                f"{date} {time}", "%d/%m/%Y %H:%M")
 
         if status_els and len(status_els) >= 2:
             # TODO discover more statuses
@@ -424,7 +459,8 @@ class MLOLClient:
                     params={**req_params, **{"page": i}},
                 )
             )
-            books = self._parse_search_page(BeautifulSoup(response.text, "html.parser"))
+            books = self._parse_search_page(
+                BeautifulSoup(response.text, "html.parser"))
             if deep:
                 with ThreadPoolExecutor(
                     max_workers=min(len(books), self.max_threads)
@@ -448,7 +484,8 @@ class MLOLClient:
         soup = BeautifulSoup(response.text, "html.parser")
         book_data = self._parse_book_page(soup)
         if book_data["title"] is None:
-            logging.warning(f"Failed to get book title for id {book_id}, skipping...")
+            logging.warning(
+                f"Failed to get book title for id {book_id}, skipping...")
             return None
 
         return MLOLBook(
@@ -483,7 +520,8 @@ class MLOLClient:
             logging.info("You already own this book. Redownloading...")
             response = self._redownload_owned_book(book_id)
         elif book.status != "available":
-            logging.error(f"Book is not available for download. Status: {book.status}")
+            logging.error(
+                f"Book is not available for download. Status: {book.status}")
             return
         else:
             response = self.session.request(
@@ -504,7 +542,8 @@ class MLOLClient:
             response = self.session.request(
                 "GET",
                 url=response.headers["Location"],
-                headers={**self.session.headers, **{"Sec-Fetch-Site": "cross-site"}},
+                headers={**self.session.headers, **
+                         {"Sec-Fetch-Site": "cross-site"}},
             )
 
         if response.text.startswith("<fulfillmentToken"):
@@ -569,7 +608,8 @@ class MLOLClient:
                 logging.error(f"Failed to reserve book #{book_id}")
                 return False
 
-        logging.error(f"Failed to reserve book with ID {book_id} (unknown outcome)")
+        logging.error(
+            f"Failed to reserve book with ID {book_id} (unknown outcome)")
 
     def reserve_book(self, book: MLOLBook, *, email: str) -> bool:
         if not isinstance(book, MLOLBook):
@@ -655,7 +695,8 @@ class MLOLClient:
                 reservations_el.select("div.bottom-buffer")
             ):
                 reservation = self._parse_reservation(reservation_el, index=i)
-                reservation.queue_position = self._get_queue_position(reservation.id)
+                reservation.queue_position = self._get_queue_position(
+                    reservation.id)
                 if deep:
                     reservation.book = self.get_book_by_id(reservation.book_id)
                 reservations.append(reservation)
@@ -669,7 +710,8 @@ class MLOLClient:
         self, query: str, *, deep: bool = False
     ) -> Generator[List[MLOLBook], None, None]:
         params = {"seltip": 310, "keywords": query.strip(), "nris": 48}
-        response = self.session.request("GET", url=ENDPOINTS["search"], params=params)
+        response = self.session.request(
+            "GET", url=ENDPOINTS["search"], params=params)
         soup = BeautifulSoup(response.text, "html.parser")
 
         try:
@@ -685,7 +727,8 @@ class MLOLClient:
         self, *, deep: bool = False
     ) -> Generator[List[MLOLBook], None, None]:
         params = {"seltip": 310, "news": "15day", "nris": 48}
-        response = self.session.request("GET", url=ENDPOINTS["search"], params=params)
+        response = self.session.request(
+            "GET", url=ENDPOINTS["search"], params=params)
         soup = BeautifulSoup(response.text, "html.parser")
 
         try:
