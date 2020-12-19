@@ -168,8 +168,8 @@ class MLOLApiConverter:
 
     def get_book(api_response) -> MLOLBook:
         return MLOLBook(
-            str(api_response["id"]),
-            api_response["dc_title"],
+            id=str(api_response["id"]),
+            title=api_response["dc_title"],
             authors=api_response["dc_creator"],
             # status = None, I don't insert the status here...
             publisher=api_response["dc_source"],
@@ -179,24 +179,24 @@ class MLOLApiConverter:
             year=api_response["pubdate"].split('-')[0],
             formats=[f.strip().lower()
                      for f in api_response["dc_format"].split()[0].split("/")],
-            drm="drm" in api_response["dc_format"].lower,
+            drm="drm" in api_response["dc_format"].lower(),
         )
 
     def get_reservation(api_response) -> MLOLReservation:
         return MLOLReservation(
-            None,
-            self.get_book(api_response),
-            date=this.get_date(api_response["inserted"])
+            id=None,
+            book=MLOLApiConverter.get_book(api_response),
+            date=MLOLApiConverter.get_date(api_response["inserted"])
             # status = api_response["status"] # Is 'attiva' a correct value? I don't think so... shouldn't it always be 'reserved'?
             # As for the queue position, we don't know and this will be a problem since we cannot get the queue position...
         )
 
     def get_loan(api_response) -> MLOLLoan:
         return MLOLLoan(
-            None,  # The API doesn't care about IDs...
-            self.get_book(api_response),
-            start_date=this.get_date(api_response["acquired"]),
-            end_date=this.get_date(api_response["expired"]),
+            id=None,  # The API doesn't care about IDs...
+            book=MLOLApiConverter.get_book(api_response),
+            start_date=MLOLApiConverter.get_date(api_response["acquired"]),
+            end_date=MLOLApiConverter.get_date(api_response["expired"]),
             download_url=api_response["url_download"]
         )
 
@@ -552,6 +552,26 @@ class MLOLClient:
             else:
                 yield books
 
+    def _scrape_resources(self, *, deep=False) -> dict:
+        reservations = []
+        response = self.session.request("GET", ENDPOINTS["resources"])
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        if reservations_el := soup.select_one("#mlolreservation"):
+            for i, reservation_el in enumerate(
+                reservations_el.select("div.bottom-buffer")
+            ):
+                reservation = self._parse_reservation(reservation_el, index=i)
+                reservation.queue_position = self._get_queue_position(
+                    reservation.id)
+                if deep:
+                    reservation.book = self.get_book_by_id(reservation.book.id)
+                reservations.append(reservation)
+
+        return {
+            "reservations": [r for r in reservations if r is not None],
+        }
+
     def get_book_by_id(self, book_id: str) -> Optional[MLOLBook]:
         logging.debug(f"Fetching book {book_id}")
         response = self.session.request(
@@ -753,7 +773,7 @@ class MLOLClient:
             )
             return False
 
-        for reservation in self.get_resources()["reservations"]:
+        for reservation in self._scrape_resources()["reservations"]:
             if reservation.book_id == book.id:
                 return self.cancel_reservation_by_id(reservation.id)
 
@@ -763,15 +783,21 @@ class MLOLClient:
         return
 
     def get_resources(self, *, more_info=False) -> dict:
+        reservations = None
+        if more_info:
+            reservations = self._scrape_resources(deep=True)
+        else:
+            reservations = [MLOLApiConverter.get_reservation(r) for r in requests.get(
+                ENDPOINTS["api"]["reservations"],
+                params={"token": self.token}
+            ).json()["reservations"]]
+
         return {
             "active_loans": [MLOLApiConverter.get_loan(l) for l in requests.get(
                 ENDPOINTS["api"]["loans"],
                 params={"token": self.token}
             ).json()["loans"]],
-            "reservations": [MLOLApiConverter.get_reservation(r) for r in requests.get(
-                ENDPOINTS["api"]["reservations"],
-                params={"token": self.token}
-            ).json()["reservations"]],
+            "reservations": reservations,
             "history": [MLOLApiConverter.get_loan(r) for r in requests.get(
                 ENDPOINTS["api"]["loans_history"],
                 params={"token": self.token}
