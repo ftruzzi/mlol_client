@@ -320,11 +320,16 @@ class MLOLClient:
                 author_el = book.select("p > a.authorref")
                 if len(author_el) > 0:
                     authors = author_el[0].string.strip()
+                elif author_el := book.find("p", attrs={"itemprop": "author"}):
+                    authors = author_el.string.strip()
+                elif author_el := book.select_one(".product-author"):
+                    authors = author_el.string.strip()
                 else:
-                    author_el = page.find("p")
-                    if author_el.attrs["itemprop"] == "author":
-                        authors = author_el.string.strip()
+                    logging.warning(f"Failed to parse author for book {title}")
+                    authors = None
+
             except Exception:
+                logging.warning(f"Failed to parse author for book {title}")
                 authors = None
 
             books.append(
@@ -376,10 +381,12 @@ class MLOLClient:
                 status_element.text.strip()
             )
 
-        if description := next(
-            filter(
-                lambda x: hasattr(x, "text"),
-                page.find("div", attrs={"itemprop": "description"}),
+        if (description_el := page.find("div", attrs={"itemprop": "description"})) and (
+            description := next(
+                filter(
+                    lambda x: hasattr(x, "text"),
+                    description_el,
+                )
             )
         ):
             book_data["description"] = description.text.strip()
