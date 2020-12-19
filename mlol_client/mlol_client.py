@@ -783,15 +783,8 @@ class MLOLClient:
         )
         return
 
-    def get_resources(self, *, more_info=False) -> dict:
-        reservations = None
-        if more_info:
-            reservations = self._scrape_resources(deep=True)
-        else:
-            reservations = [MLOLApiConverter.get_reservation(r) for r in requests.get(
-                ENDPOINTS["api"]["reservations"],
-                params={"token": self.token}
-            ).json()["reservations"]]
+    def get_resources(self, *, deep=False) -> dict:
+        reservations self._scrape_resources(deep=deep)
 
         return {
             "active_loans": [MLOLApiConverter.get_loan(l) for l in requests.get(
