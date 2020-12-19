@@ -784,7 +784,7 @@ class MLOLClient:
         return
 
     def get_resources(self, *, deep=False) -> dict:
-        reservations self._scrape_resources(deep=deep)
+        reservations = self._scrape_resources(deep=deep)
 
         return {
             "active_loans": [MLOLApiConverter.get_loan(l) for l in requests.get(
