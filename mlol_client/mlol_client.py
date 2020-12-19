@@ -1,5 +1,6 @@
 import logging
 import re
+from base64 import b64encode, b64decode
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -199,7 +200,7 @@ class MLOLApiConverter:
     @staticmethod
     def get_loan(api_response) -> MLOLLoan:
         return MLOLLoan(
-            id=None,  # The API doesn't care about IDs...
+            id=b64decode(api_response["url_download"].split('/')[-1]),
             book=MLOLApiConverter.get_book(api_response),
             start_date=MLOLApiConverter.get_date(api_response["acquired"]),
             end_date=MLOLApiConverter.get_date(api_response["expired"]),
