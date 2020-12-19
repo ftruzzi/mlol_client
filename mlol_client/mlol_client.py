@@ -600,6 +600,9 @@ class MLOLClient:
         if not isinstance(book, MLOLBook):
             raise ValueError(f"Expected MLOLBook, got {type(book)}")
 
+        if book.download_url is not None:
+            return requests.get(book.downlaod_url).content
+
         return self.download_book_by_id(book.id)
 
     def get_book_url_by_id(self, book_id: str) -> str:
