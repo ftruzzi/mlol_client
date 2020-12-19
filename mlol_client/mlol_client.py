@@ -18,7 +18,7 @@ DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.
 DEFAULT_HEADERS = {
     "User-Agent": DEFAULT_USER_AGENT,
     "Upgrade-Insecure-Requests": "1",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q = 0.9,image/avif,image/webp,image/apng,*/*;q = 0.8,application/signed-exchange;v = b3;q = 0.9",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
     "Sec-Fetch-Site": "same-origin",
     "Sec-Fetch-Mode": "navigate",
     "Sec-Fetch-User": "?1",
