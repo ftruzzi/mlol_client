@@ -23,7 +23,7 @@ from mlol_client import MLOLClient
 mlol = MLOLClient()
 
 # authenticated
-mlol = MLOLClient(subdomain="your_library.medialibrary.it", username="your_username", password="your_password")
+mlol = MLOLClient(domain="your_library.medialibrary.it", username="your_username", password="your_password")
 ```
 
 Note: the `search_books` method returns a generator of pages, which are lists of books, as this is how results
