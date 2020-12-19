@@ -39,6 +39,8 @@ ENDPOINTS = {
         "login": "https://api.medialibrary.it/app/login",
         "portals": "https://api.medialibrary.it/app/portals",
         "loans_history": "https://api.medialibrary.it/app/loanhistory",
+        "loans": "https://api.medialibrary.it/app/loans",
+        "reservations": "https://api.medialibrary.it/app/reservations",
     },
 }
 
@@ -722,33 +724,19 @@ class MLOLClient:
         return
 
     def get_resources(self, *, more_info=False) -> dict:
-        # TODO support old, inactive loans
-        active_loans = []
-        reservations = []
-        response = self.session.request("GET", ENDPOINTS["resources"])
-        soup = BeautifulSoup(response.text, "html.parser")
-
-        if active_loans_el := soup.select_one("#mlolloan"):
-            for i, loan_el in enumerate(active_loans_el.select("div.bottom-buffer")):
-                loan = self._parse_active_loan(loan_el, index=i)
-                if deep:
-                    loan.book = self.get_book_by_id(loan.book_id)
-                active_loans.append(loan)
-
-        if reservations_el := soup.select_one("#mlolreservation"):
-            for i, reservation_el in enumerate(
-                reservations_el.select("div.bottom-buffer")
-            ):
-                reservation = self._parse_reservation(reservation_el, index=i)
-                reservation.queue_position = self._get_queue_position(
-                    reservation.id)
-                if deep:
-                    reservation.book = self.get_book_by_id(reservation.book_id)
-                reservations.append(reservation)
-
         return {
-            "active_loans": [l for l in active_loans if l is not None],
-            "reservations": [r for r in reservations if r is not None],
+            "active_loans": [MLOLApiConverter.get_loan(l) for l in requests.get(
+                ENDPOINTS["api"]["loans"],
+                params={"token": self.token}
+            ).json()["loans"]],
+            "reservations": [MLOLApiConverter.get_reservation(r) for r in requests.get(
+                ENDPOINTS["api"]["reservations"],
+                params={"token": self.token}
+            ).json()["reservations"]],
+            "history": [MLOLApiConverter.get_loan(r) for r in requests.get(
+                ENDPOINTS["api"]["loans_history"],
+                params={"token": self.token}
+            ).json()["loans"]],
         }
 
     def search_books(
