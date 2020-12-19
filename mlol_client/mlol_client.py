@@ -41,8 +41,38 @@ ENDPOINTS = {
         "loans_history": "https://api.medialibrary.it/app/loanhistory",
         "loans": "https://api.medialibrary.it/app/loans",
         "reservations": "https://api.medialibrary.it/app/reservations",
+        "userinfo": "https://api.medialibrary.it/app/profile"
     },
 }
+
+
+class MLOLUser:
+    def __init__(
+        self,
+        *,
+        id: int,
+        name: str,
+        surname: str,
+        username: str,
+        remaining_loans: int,
+        remaining_resvs: int,
+        expiration_date: datetime,
+    ):
+        self.id = id
+        self.name = name
+        self.surname = surname
+        self.username = username
+        self.remaining_loans = remaining_loans
+        self.remaining_resvs = remaining_resvs
+        self.expiration_date = expiration_date
+
+    def __repr__(self):
+        values = {
+            k: "{}{}".format(str(v)[:50], "..." if len(str(v)) > 50 else "")
+            for k, v in self.__dict__.items()
+            if v is not None
+        }
+        return f"<mlol_client.MLOLUser: {values}>"
 
 
 class MLOLBook:
@@ -170,6 +200,16 @@ class MLOLApiConverter:
             download_url=api_response["url_download"]
         )
 
+    def get_user(api_response) -> MLOLUser:
+        return MLOLUser(api_response["id"],
+                        api_response["firstname"],
+                        api_response["lastname"],
+                        api_response["username"],
+                        int(api_response["ebook_loans_remaining"]),
+                        int(api_response["ebook_loans_remaining"]),
+                        self.get_date(api_response["expires"])
+                        )
+
 
 class MLOLClient:
     max_threads = 5
@@ -198,7 +238,6 @@ class MLOLClient:
                 username, password, str(library_id))
             self.token = self._get_api_token(
                 username, password, str(library_id))
-            print(self)
 
         adapter = HTTPAdapter(
             max_retries=Retry(
@@ -772,3 +811,6 @@ class MLOLClient:
         return self._search_books_paginated(
             req_params=params, deep=deep, pages=pages, first_response=response
         )
+
+    def get_user_info(self) -> MLOLUser:
+        return MLOLApiConverter.get_user(requests.get(ENDPOINTS["api"]["userinfo"], params={"token": self.token}).json())
