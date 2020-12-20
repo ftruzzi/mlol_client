@@ -26,8 +26,9 @@ DEFAULT_HEADERS = {
     "Sec-Fetch-Dest": "document",
 }
 ENDPOINTS = {
+    "index": "/home/index.aspx",
     "search": "/media/ricerca.aspx",
-    "login": "/user/logform.aspx",
+    "login": "/user/login.aspx",
     "resources": "/user/risorse.aspx",
     "get_book": "/media/scheda.aspx",
     "redownload": "/help/dlrepeat.aspx",
@@ -39,9 +40,8 @@ ENDPOINTS = {
     "api": {
         "login": "https://api.medialibrary.it/app/login",
         "portals": "https://api.medialibrary.it/app/portals",
-        "loans_history": "https://api.medialibrary.it/app/loanhistory",
+        "loan_history": "https://api.medialibrary.it/app/loanhistory",
         "loans": "https://api.medialibrary.it/app/loans",
-        "reservations": "https://api.medialibrary.it/app/reservations",
         "userinfo": "https://api.medialibrary.it/app/profile",
     },
 }
@@ -55,7 +55,7 @@ class MLOLUser:
         surname: str,
         username: str,
         remaining_loans: int,
-        remaining_resvs: int,
+        remaining_reservations: int,
         expiration_date: datetime,
     ):
         self.id = id
@@ -63,7 +63,7 @@ class MLOLUser:
         self.surname = surname
         self.username = username
         self.remaining_loans = remaining_loans
-        self.remaining_resvs = remaining_resvs
+        self.remaining_reservations = remaining_reservations
         self.expiration_date = expiration_date
 
     def __repr__(self):
@@ -81,7 +81,7 @@ class MLOLBook:
         *,
         id: str,
         title: str,
-        authors: str = None,
+        authors: List[str] = None,
         status: str = None,
         publisher: str = None,
         ISBNs: List[str] = None,
@@ -90,7 +90,6 @@ class MLOLBook:
         year: int = None,
         formats: List[str] = None,
         drm: bool = None,
-        download_url: str = None,
     ):
         self.id = str(id)
         self.title = title
@@ -103,7 +102,6 @@ class MLOLBook:
         self.year = year
         self.formats = formats
         self.drm = drm
-        self.download_url = download_url
 
     def __repr__(self):
         values = {
@@ -148,7 +146,7 @@ class MLOLLoan:
         start_date: datetime = None,
         end_date: datetime = None,
     ):
-        self.id = str(id)
+        self.id = str(id) if id else None
         self.book = book
         self.start_date = start_date
         self.end_date = end_date
@@ -164,46 +162,51 @@ class MLOLLoan:
 
 class MLOLApiConverter:
     @staticmethod
+    def get_loan_id(download_url: str) -> Optional[str]:
+        try:
+            return b64decode(download_url.split("/")[-1])
+        except:
+            logging.error("Failed to retrieve loan ID")
+            return
+
+    @staticmethod
     def get_date(date: str) -> datetime:
-        # Convert 2020-12-20 into a datetime
         return datetime.strptime(date, "%Y-%m-%d")
 
     @staticmethod
     def get_book(api_response) -> MLOLBook:
+        # from "Bianchi, Luca|Rossi, Mario"
+        # to ["Luca Bianchi", "Mario Rossi"]
+        authors = [
+            " ".join(list(reversed(a.split(", "))))
+            for a in api_response["dc_creator"].split("|")
+        ]
+
         return MLOLBook(
+            # skip: description (not a string), language, status (not returned)
             id=str(api_response["id"]),
-            title=api_response["dc_title"],
-            authors=api_response["dc_creator"],
-            # status = None, I don't insert the status here...
+            title=api_response["dc_title"].strip(),
+            authors=authors,
             publisher=api_response["dc_source"],
-            ISBNs=api_response["isbn"],
-            # language = None, The API doesn't tell me this
-            description=api_response["dc_description"],
-            year=api_response["pubdate"].split("-")[0],
+            # website also returns paper ISBN
+            ISBNs=[api_response["isbn"]],
+            year=MLOLApiConverter.get_date(api_response["pubdate"]).year,
             formats=[
                 f.strip().lower()
                 for f in api_response["dc_format"].split()[0].split("/")
             ],
             drm="drm" in api_response["dc_format"].lower(),
-            download_url=None
-            if "url_download" not in api_response
-            else api_response["url_download"],
         )
 
     @staticmethod
-    def get_reservation(api_response) -> MLOLReservation:
-        return MLOLReservation(
-            id=None,
-            book=MLOLApiConverter.get_book(api_response),
-            date=MLOLApiConverter.get_date(api_response["inserted"])
-            # status = api_response["status"] # Is 'attiva' a correct value? I don't think so... shouldn't it always be 'reserved'?
-            # As for the queue position, we don't know and this will be a problem since we cannot get the queue position...
-        )
+    def get_loan(api_response) -> Optional[MLOLLoan]:
+        if "url_download" not in api_response:
+            return
 
-    @staticmethod
-    def get_loan(api_response) -> MLOLLoan:
+        loan_id = MLOLApiConverter.get_loan_id(api_response["url_download"])
+
         return MLOLLoan(
-            id=b64decode(api_response["url_download"].split('/')[-1]),
+            id=loan_id if loan_id else None,
             book=MLOLApiConverter.get_book(api_response),
             start_date=MLOLApiConverter.get_date(api_response["acquired"]),
             end_date=MLOLApiConverter.get_date(api_response["expired"]),
@@ -212,43 +215,39 @@ class MLOLApiConverter:
     @staticmethod
     def get_user(api_response) -> MLOLUser:
         return MLOLUser(
-            api_response["userid"],
-            api_response["firstname"],
-            api_response["lastname"],
-            api_response["username"],
-            int(api_response["ebook_loans_remaining"]),
-            int(api_response["ebook_loans_remaining"]),
-            MLOLApiConverter.get_date(api_response["expires"]),
+            id=api_response["userid"],
+            name=api_response["firstname"].capitalize(),
+            surname=api_response["lastname"].capitalize(),
+            username=api_response["username"],
+            remaining_loans=int(api_response["ebook_loans_remaining"]),
+            remaining_reservations=int(api_response["ebook_reservations_remaining"]),
+            expiration_date=MLOLApiConverter.get_date(api_response["expires"]),
         )
 
 
 class MLOLClient:
     max_threads = 5
+    library_id = None
     session = None
-    # Token for the REST API
-    token = None
+    api_token = None
 
-    def __init__(
-        self, *, domain=None, username=None, password=None, library_id_or_name=None
-    ):
+    def __init__(self, *, domain=None, username=None, password=None, library_id=None):
         self.session = sessions.BaseUrlSession(base_url="https://medialibrary.it")
         self.session.headers.update(DEFAULT_HEADERS)
 
-        if not (username and password and domain and library_id_or_name):
+        if not (username and password and domain):
             logging.warning(
                 "You did not provide authentication credentials and a subdomain. You will not be able to perform actions that require authentication."
             )
         else:
-            library_id = self._get_library_id_from_string(library_id_or_name)[0]
             self.domain = domain
             self.username = username
             self.session.base_url = "https://" + re.sub(
                 r"https?(://)", "", domain.rstrip("/")
             )
-            self.session.cookies = self._get_auth_cookies(
-                username, password, str(library_id)
+            self._authenticate(
+                username=username, password=password, library_id=library_id
             )
-            self.token = self._get_api_token(username, password, str(library_id))
 
         adapter = HTTPAdapter(
             max_retries=Retry(
@@ -270,31 +269,108 @@ class MLOLClient:
         values["password"] = "***"
         return f"<mlol_client.MLOLClient: {values}"
 
-    def _get_auth_cookies(
+    def _login_web(self, *, username: str, password: str, library_id: str):
+        headers = {
+            **DEFAULT_HEADERS,
+            **{
+                "Host": self.domain.replace("https://", ""),
+                "Origin": self.domain,
+                "Referer": f"{self.session.base_url}/user/logform.aspx",
+            },
+        }
+        data = {"lusername": username, "lpassword": password, "lente": library_id}
+        response = self.session.request(
+            "POST",
+            url=ENDPOINTS["login"],
+            headers=headers,
+            data=data,
+            allow_redirects=False,
+        )
+        if response.headers["Location"] == "/media/esplora.aspx":
+            return True
+
+        return False
+
+    def _authenticate(
         self, username: str, password: str, library_id: str
-    ) -> RequestsCookieJar:
-        # using RoboBrowser to avoid keeping a mapping of MLOL subdomains to their numeric IDs
-        # a POST request including a "lente" param would be enough
-        browser = RoboBrowser(parser="html.parser", user_agent=DEFAULT_USER_AGENT)
-        browser.open(f"{self.session.base_url}{ENDPOINTS['login']}")
-        form = [f for f in browser.get_forms() if "lusername" in f.fields][0]
-        form["lusername"] = username
-        form["lpassword"] = password
-        if library_id is not None:
-            form["lente"] = library_id
-        browser.submit_form(form)
-        return browser.session.cookies
+    ) -> Optional[bool]:
+        response = self.session.request("GET", url=ENDPOINTS["index"])
+        soup = BeautifulSoup(response.text, "html.parser")
+        if not library_id:
+            # get all "lente" values for subdomain, try all
+            if library_id_els := soup.select("#lente > option"):
+                library_id_values = [
+                    o.attrs["value"] for o in library_id_els if "value" in o.attrs
+                ]
+                for l_id in library_id_values:
+                    if self._login_web(
+                        username=username, password=password, library_id=l_id
+                    ):
+                        logging.debug(
+                            f"Found library ID for username {username} on {self.domain}: {l_id}"
+                        )
+                        # TODO save value
+                        self.library_id = l_id
+                        break
+
+            if not self.library_id:
+                logging.error(
+                    "Login failed. Please make sure your credentials are valid or try to specify a manual library ID."
+                )
+                return
+        else:
+            if not self._login_web(
+                username=username, password=password, library_id=library_id
+            ):
+                logging.error(
+                    "Login failed. Please make sure your credentials are valid."
+                )
+                return False
+
+        if api_token := self._get_api_token(
+            username=username, password=password, library_id=self.library_id
+        ):
+            self.api_token = api_token
+        else:
+            logging.error("Failed to retrieve your API token.")
+            return
+
+        return True
 
     def _get_api_token(self, username: str, password: str, library_id: str) -> str:
-        return requests.post(
-            ENDPOINTS["api"]["login"],
+        data = self._api_request(
+            method="POST",
+            url=ENDPOINTS["api"]["login"],
             data={
                 "username": username,
                 "password": password,
                 "portal": library_id,
                 "app_code": "",
             },
-        ).json()["token"]
+        )
+
+        return data["token"] if data and "token" in data else None
+
+    def _api_request(self, **kwargs):
+        if self.api_token:
+            if "params" in kwargs:
+                kwargs["params"].update({"token": self.api_token})
+            else:
+                kwargs["params"] = {"token": self.api_token}
+
+        kwargs["headers"] = (
+            dict(DEFAULT_HEADERS, **kwargs["headers"])
+            if "headers" in kwargs
+            else DEFAULT_HEADERS
+        )
+
+        response = requests.request(**kwargs)
+        response.raise_for_status()
+        if "application/json" in response.headers["Content-Type"]:
+            return response.json()
+
+        logging.error(f"Unexpected API response: {response.raw}")
+        return
 
     def _get_queue_position(self, reservation_id: str) -> Optional[int]:
         params = {"id": reservation_id}
@@ -309,14 +385,6 @@ class MLOLClient:
 
         logging.error(f"Failed to get queue position for reservation #{reservation_id}")
         return
-
-    @staticmethod
-    def _get_library_id_from_string(search: str) -> List[int]:
-        return [
-            i["id"]
-            for i in requests.get(ENDPOINTS["api"]["portals"]).json()
-            if str(i["id"]) == search or i["name"].find(search) != -1
-        ]
 
     @staticmethod
     def _parse_search_page(page: Tag) -> List[MLOLBook]:
@@ -428,52 +496,6 @@ class MLOLClient:
         return book_data
 
     @staticmethod
-    def _parse_active_loan(loan_el: Tag, *, index: int = -1) -> Optional[MLOLLoan]:
-        loan_id = book_id = None
-        if loan_id_element := loan_el.find(
-            "a", attrs={"href": re.compile(r"(?<=idp=)\d+$")}
-        ):
-            loan_id = re.search(r"(?<=\=)\d+$", loan_id_element.attrs["href"]).group()
-        else:
-            logging.error(f"Could not find loan ID for loan #{index + 1}")
-            return
-
-        if book_id_element := loan_el.find(
-            "a", attrs={"href": re.compile(r"(?<=scheda.aspx\?id=)\d+$")}
-        ):
-            book_id = re.search(r"(?<=\=)\d+$", book_id_element.attrs["href"]).group()
-        else:
-            logging.error(f"Could not find book ID for loan #{index + 1}")
-            return
-
-        loan = MLOLLoan(id=loan_id, book=MLOLBook(id=book_id, title=""))
-
-        if book_title_el := loan_el.select_one("div > div > h3"):
-            loan.book.title = book_title_el.text.strip()
-
-        if authors_el := loan_el.find("span", attrs={"itemprop": "author"}):
-            loan.book.authors = [a.strip() for a in authors_el.text.strip().split(";")]
-
-        table_els = loan_el.select("tr")
-        start_date_els = [c for c in table_els[0] if c != "\n"]
-        end_date_els = [c for c in table_els[1] if c != "\n"]
-        if start_date_els and len(start_date_els) >= 3:
-            start_date = start_date_els[1].text.strip()
-            start_time = start_date_els[2].text.strip()
-            loan.start_date = datetime.strptime(
-                f"{start_date} {start_time}", "%d/%m/%Y %H:%M"
-            )
-
-        if end_date_els and len(end_date_els) >= 3:
-            end_date = end_date_els[1].text.strip()
-            end_time = end_date_els[2].text.strip()
-            loan.end_date = datetime.strptime(
-                f"{end_date} {end_time}", "%d/%m/%Y %H:%M"
-            )
-
-        return loan
-
-    @staticmethod
     def _parse_reservation(
         reservation_el: Tag, *, index: int = -1
     ) -> Optional[MLOLReservation]:
@@ -571,7 +593,7 @@ class MLOLClient:
             else:
                 yield books
 
-    def _scrape_resources(self, *, deep=False) -> dict:
+    def _get_reservations(self, *, deep=False) -> List[MLOLReservation]:
         reservations = []
         response = self.session.request("GET", ENDPOINTS["resources"])
         soup = BeautifulSoup(response.text, "html.parser")
@@ -673,9 +695,6 @@ class MLOLClient:
     def download_book(self, book: MLOLBook) -> Optional[bytes]:
         if not isinstance(book, MLOLBook):
             raise ValueError(f"Expected MLOLBook, got {type(book)}")
-
-        if book.download_url is not None:
-            return requests.get(book.download_url).content
 
         return self.download_book_by_id(book.id)
 
@@ -785,8 +804,8 @@ class MLOLClient:
             )
             return False
 
-        for reservation in self._scrape_resources()["reservations"]:
-            if reservation.book_id == book.id:
+        for reservation in self._get_reservations():
+            if reservation.book.id == book.id:
                 return self.cancel_reservation_by_id(reservation.id)
 
         logging.error(
@@ -795,23 +814,35 @@ class MLOLClient:
         return
 
     def get_resources(self, *, deep=False) -> dict:
-        reservations = self._scrape_resources(deep=deep)
+        resources = {}
+        resources["reservations"] = self._get_reservations(deep=deep)
+        if (
+            loan_response := self._api_request(
+                method="GET", url=ENDPOINTS["api"]["loans"]
+            )
+        ) and "loans" in loan_response:
+            resources["active_loans"] = [
+                MLOLApiConverter.get_loan(l) for l in loan_response["loans"]
+            ]
 
-        return {
-            "active_loans": [
-                MLOLApiConverter.get_loan(l)
-                for l in requests.get(
-                    ENDPOINTS["api"]["loans"], params={"token": self.token}
-                ).json()["loans"]
-            ],
-            "reservations": reservations,
-            "history": [
-                MLOLApiConverter.get_loan(r)
-                for r in requests.get(
-                    ENDPOINTS["api"]["loans_history"], params={"token": self.token}
-                ).json()["loans"]
-            ],
-        }
+        if (
+            loan_history_response := self._api_request(
+                method="GET", url=ENDPOINTS["api"]["loan_history"]
+            )
+        ) and "loans" in loan_history_response:
+            resources["loan_history"] = [
+                MLOLApiConverter.get_loan(l) for l in loan_history_response["loans"]
+            ]
+
+        if deep:
+            for loan in resources["active_loans"]:
+                if book := self.get_book_by_id(loan.book.id):
+                    loan.book = book
+            for loan in resources["loan_history"]:
+                if book := self.get_book_by_id(loan.book.id):
+                    loan.book = book
+
+        return resources
 
     def search_books(
         self, query: str, *, deep: bool = False
@@ -845,9 +876,9 @@ class MLOLClient:
             req_params=params, deep=deep, pages=pages, first_response=response
         )
 
-    def get_user_info(self) -> MLOLUser:
-        return MLOLApiConverter.get_user(
-            requests.get(
-                ENDPOINTS["api"]["userinfo"], params={"token": self.token}
-            ).json()
-        )
+    def get_user(self) -> Optional[MLOLUser]:
+        data = self._api_request(method="GET", url=ENDPOINTS["api"]["userinfo"])
+        if data:
+            return MLOLApiConverter.get_user(data)
+
+        return None
