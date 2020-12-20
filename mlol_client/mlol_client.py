@@ -1,20 +1,23 @@
+import json
 import logging
+import os
 import re
-from base64 import b64encode, b64decode
+import time
+from base64 import b64decode
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from shutil import copy
 from typing import Optional, List, Generator
 
 import requests
 from bs4 import BeautifulSoup, Tag
 from requests.adapters import HTTPAdapter
-from requests.cookies import RequestsCookieJar
 from requests.models import Response
 from requests.packages.urllib3.util.retry import Retry
 from requests_toolbelt import sessions
-from robobrowser import RoboBrowser
 
+LIBRARY_MAPPING_FNAME = os.path.join(os.path.dirname(__file__), "library_mapping.json")
 DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.67 Safari/537.36"
 DEFAULT_HEADERS = {
     "User-Agent": DEFAULT_USER_AGENT,
@@ -242,11 +245,15 @@ class MLOLClient:
         else:
             self.domain = domain
             self.username = username
+            if saved_library_id := self._get_saved_library_id():
+                self.library_id = saved_library_id
+
             self.session.base_url = "https://" + re.sub(
                 r"https?(://)", "", domain.rstrip("/")
             )
+
             self._authenticate(
-                username=username, password=password, library_id=library_id
+                username=username, password=password, library_id=library_id if library_id else saved_library_id
             )
 
         adapter = HTTPAdapter(
@@ -291,12 +298,50 @@ class MLOLClient:
 
         return False
 
+    def _get_saved_library_id(self) -> Optional[str]:
+        if not os.path.isfile(LIBRARY_MAPPING_FNAME) or os.stat(LIBRARY_MAPPING_FNAME).st_size == 0:
+            return
+
+        with open(LIBRARY_MAPPING_FNAME, "r", encoding="utf8") as f:
+            try:
+                data = json.load(f)
+            except:
+                logging.warning("Couldn't read library mapping file.")
+                return
+
+        k = f"{self.username}@{self.domain}"
+        if k in data and data[k]:
+            logging.debug(f"Found library ID for {k} in mapping file.")
+            return data[k]
+
+    def _update_library_mapping(self, library_id):
+        if os.path.isfile(LIBRARY_MAPPING_FNAME):
+            with open(LIBRARY_MAPPING_FNAME, "r", encoding="utf8") as f:
+                try:
+                    data = json.load(f)
+                except:
+                    if os.stat(LIBRARY_MAPPING_FNAME).st_size != 0:
+                        logging.warning("Couldn't read library mapping file. Backing up and overwriting...")
+                        copy(LIBRARY_MAPPING_FNAME, f"{LIBRARY_MAPPING_FNAME}_{int(time.time())}.bak")
+                    data = {}
+        else:
+            data = {}
+
+        k = f"{self.username}@{self.domain}"
+        data[k] = library_id
+
+        with open(LIBRARY_MAPPING_FNAME, "w", encoding="utf8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        return True
+
     def _authenticate(
         self, username: str, password: str, library_id: str
     ) -> Optional[bool]:
-        response = self.session.request("GET", url=ENDPOINTS["index"])
-        soup = BeautifulSoup(response.text, "html.parser")
+
         if not library_id:
+            response = self.session.request("GET", url=ENDPOINTS["index"])
+            soup = BeautifulSoup(response.text, "html.parser")
             # get all "lente" values for subdomain, try all
             if library_id_els := soup.select("#lente > option"):
                 library_id_values = [
@@ -309,8 +354,8 @@ class MLOLClient:
                         logging.debug(
                             f"Found library ID for username {username} on {self.domain}: {l_id}"
                         )
-                        # TODO save value
                         self.library_id = l_id
+                        self._update_library_mapping(l_id)
                         break
 
             if not self.library_id:
