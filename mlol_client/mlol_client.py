@@ -593,7 +593,7 @@ class MLOLClient:
             else:
                 yield books
 
-    def _get_reservations(self, *, deep=False) -> List[MLOLReservation]:
+    def _get_reservations(self) -> List[MLOLReservation]:
         reservations = []
         response = self.session.request("GET", ENDPOINTS["resources"])
         soup = BeautifulSoup(response.text, "html.parser")
@@ -604,8 +604,6 @@ class MLOLClient:
             ):
                 reservation = self._parse_reservation(reservation_el, index=i)
                 reservation.queue_position = self._get_queue_position(reservation.id)
-                if deep:
-                    reservation.book = self.get_book_by_id(reservation.book.id)
                 reservations.append(reservation)
 
         return [r for r in reservations if r is not None]
@@ -815,7 +813,8 @@ class MLOLClient:
 
     def get_resources(self, *, deep=False) -> dict:
         resources = {}
-        resources["reservations"] = self._get_reservations(deep=deep)
+        resources["reservations"] = self._get_reservations()
+
         if (
             loan_response := self._api_request(
                 method="GET", url=ENDPOINTS["api"]["loans"]
@@ -835,6 +834,9 @@ class MLOLClient:
             ]
 
         if deep:
+            for reservation in resources["reservations"]:
+                if book := self.get_book_by_id(reservation.book.id):
+                    reservation.book = book
             for loan in resources["active_loans"]:
                 if book := self.get_book_by_id(loan.book.id):
                     loan.book = book
