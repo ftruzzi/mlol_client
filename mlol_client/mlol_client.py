@@ -178,7 +178,7 @@ class MLOLApiConverter:
     @staticmethod
     def get_loan_id(download_url: str) -> Optional[str]:
         try:
-            return b64decode(download_url.split("/")[-1])
+            return b64decode(download_url.split("/")[-1]).decode()
         except:
             logging.error("Failed to retrieve loan ID")
             return
