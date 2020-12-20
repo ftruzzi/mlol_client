@@ -28,7 +28,7 @@ DEFAULT_HEADERS = {
     "Sec-Fetch-User": "?1",
     "Sec-Fetch-Dest": "document",
 }
-ENDPOINTS = {
+WEB_ENDPOINTS = {
     "index": "/home/index.aspx",
     "search": "/media/ricerca.aspx",
     "login": "/user/login.aspx",
@@ -40,13 +40,14 @@ ENDPOINTS = {
     "reserve": "/media/prenota2.aspx",
     "cancel_reservation": "/media/annullaPr.aspx",
     "get_queue_position": "/commons/QueuePos.aspx",
-    "api": {
-        "login": "https://api.medialibrary.it/app/login",
-        "portals": "https://api.medialibrary.it/app/portals",
-        "loan_history": "https://api.medialibrary.it/app/loanhistory",
-        "loans": "https://api.medialibrary.it/app/loans",
-        "userinfo": "https://api.medialibrary.it/app/profile",
-    },
+}
+
+API_ENDPOINTS = {
+    "login": "https://api.medialibrary.it/app/login",
+    "portals": "https://api.medialibrary.it/app/portals",
+    "loan_history": "https://api.medialibrary.it/app/loanhistory",
+    "loans": "https://api.medialibrary.it/app/loans",
+    "userinfo": "https://api.medialibrary.it/app/profile",
 }
 
 
@@ -253,7 +254,9 @@ class MLOLClient:
             )
 
             self._authenticate(
-                username=username, password=password, library_id=library_id if library_id else saved_library_id
+                username=username,
+                password=password,
+                library_id=library_id if library_id else saved_library_id,
             )
 
         adapter = HTTPAdapter(
@@ -288,7 +291,7 @@ class MLOLClient:
         data = {"lusername": username, "lpassword": password, "lente": library_id}
         response = self.session.request(
             "POST",
-            url=ENDPOINTS["login"],
+            url=WEB_ENDPOINTS["login"],
             headers=headers,
             data=data,
             allow_redirects=False,
@@ -299,7 +302,10 @@ class MLOLClient:
         return False
 
     def _get_saved_library_id(self) -> Optional[str]:
-        if not os.path.isfile(LIBRARY_MAPPING_FNAME) or os.stat(LIBRARY_MAPPING_FNAME).st_size == 0:
+        if (
+            not os.path.isfile(LIBRARY_MAPPING_FNAME)
+            or os.stat(LIBRARY_MAPPING_FNAME).st_size == 0
+        ):
             return
 
         with open(LIBRARY_MAPPING_FNAME, "r", encoding="utf8") as f:
@@ -321,8 +327,13 @@ class MLOLClient:
                     data = json.load(f)
                 except:
                     if os.stat(LIBRARY_MAPPING_FNAME).st_size != 0:
-                        logging.warning("Couldn't read library mapping file. Backing up and overwriting...")
-                        copy(LIBRARY_MAPPING_FNAME, f"{LIBRARY_MAPPING_FNAME}_{int(time.time())}.bak")
+                        logging.warning(
+                            "Couldn't read library mapping file. Backing up and overwriting..."
+                        )
+                        copy(
+                            LIBRARY_MAPPING_FNAME,
+                            f"{LIBRARY_MAPPING_FNAME}_{int(time.time())}.bak",
+                        )
                     data = {}
         else:
             data = {}
@@ -340,7 +351,7 @@ class MLOLClient:
     ) -> Optional[bool]:
 
         if not library_id:
-            response = self.session.request("GET", url=ENDPOINTS["index"])
+            response = self.session.request("GET", url=WEB_ENDPOINTS["index"])
             soup = BeautifulSoup(response.text, "html.parser")
             # get all "lente" values for subdomain, try all
             if library_id_els := soup.select("#lente > option"):
@@ -385,7 +396,7 @@ class MLOLClient:
     def _get_api_token(self, username: str, password: str, library_id: str) -> str:
         data = self._api_request(
             method="POST",
-            url=ENDPOINTS["api"]["login"],
+            url=API_ENDPOINTS["login"],
             data={
                 "username": username,
                 "password": password,
@@ -396,7 +407,7 @@ class MLOLClient:
 
         return data["token"] if data and "token" in data else None
 
-    def _api_request(self, **kwargs):
+    def _api_request(self, **kwargs) -> Optional[dict]:
         if self.api_token:
             if "params" in kwargs:
                 kwargs["params"].update({"token": self.api_token})
@@ -420,7 +431,7 @@ class MLOLClient:
     def _get_queue_position(self, reservation_id: str) -> Optional[int]:
         params = {"id": reservation_id}
         response = self.session.request(
-            "GET", url=ENDPOINTS["get_queue_position"], params=params
+            "GET", url=WEB_ENDPOINTS["get_queue_position"], params=params
         )
 
         if "in coda" in response.text and (
@@ -595,7 +606,7 @@ class MLOLClient:
         if loan_id := next((l.id for l in active_loans if l.book_id == book_id), None):
             response = self.session.request(
                 "GET",
-                url=ENDPOINTS["redownload"],
+                url=WEB_ENDPOINTS["redownload"],
                 headers={
                     **self.session.headers,
                     **{
@@ -625,7 +636,7 @@ class MLOLClient:
                 if pages == 1
                 else self.session.request(
                     method="GET",
-                    url=ENDPOINTS["search"],
+                    url=WEB_ENDPOINTS["search"],
                     params={**req_params, **{"page": i}},
                 )
             )
@@ -640,7 +651,7 @@ class MLOLClient:
 
     def _get_reservations(self) -> List[MLOLReservation]:
         reservations = []
-        response = self.session.request("GET", ENDPOINTS["resources"])
+        response = self.session.request("GET", WEB_ENDPOINTS["resources"])
         soup = BeautifulSoup(response.text, "html.parser")
 
         if reservations_el := soup.select_one("#mlolreservation"):
@@ -657,7 +668,7 @@ class MLOLClient:
         logging.debug(f"Fetching book {book_id}")
         response = self.session.request(
             "GET",
-            url=ENDPOINTS["get_book"],
+            url=WEB_ENDPOINTS["get_book"],
             params={"id": book_id},
         )
         if "alert.aspx" in response.url:
@@ -708,7 +719,7 @@ class MLOLClient:
         else:
             response = self.session.request(
                 "GET",
-                url=ENDPOINTS["download"],
+                url=WEB_ENDPOINTS["download"],
                 headers={
                     **self.session.headers,
                     **{
@@ -742,7 +753,7 @@ class MLOLClient:
         return self.download_book_by_id(book.id)
 
     def get_book_url_by_id(self, book_id: str) -> str:
-        return f"{self.session.base_url}{ENDPOINTS['get_book']}?id={book_id}"
+        return f"{self.session.base_url}{WEB_ENDPOINTS['get_book']}?id={book_id}"
 
     def get_book_url(self, book: MLOLBook) -> str:
         return self.get_book_url_by_id(book.id)
@@ -764,7 +775,7 @@ class MLOLClient:
             **self.session.headers,
             **{
                 "Host": self.session.base_url.replace("https://", ""),
-                "Referer": f"{self.session.base_url}{ENDPOINTS['pre_reserve']}?id={book_id}",
+                "Referer": f"{self.session.base_url}{WEB_ENDPOINTS['pre_reserve']}?id={book_id}",
                 "Accept": "text/html, */*; q=0.01",
             },
         }
@@ -772,7 +783,7 @@ class MLOLClient:
         response = self.session.request(
             "GET",
             # don't pass params, build the URL directly to avoid percent encoding
-            url=f"{ENDPOINTS['reserve']}?id={book_id}&email={email}",
+            url=f"{WEB_ENDPOINTS['reserve']}?id={book_id}&email={email}",
             headers=headers,
         )
         soup = BeautifulSoup(response.text, "html.parser")
@@ -809,7 +820,7 @@ class MLOLClient:
         }
         response = self.session.request(
             "GET",
-            url=ENDPOINTS["cancel_reservation"],
+            url=WEB_ENDPOINTS["cancel_reservation"],
             headers=headers,
             params=params,
             allow_redirects=False,
@@ -861,9 +872,7 @@ class MLOLClient:
         resources["reservations"] = self._get_reservations()
 
         if (
-            loan_response := self._api_request(
-                method="GET", url=ENDPOINTS["api"]["loans"]
-            )
+            loan_response := self._api_request(method="GET", url=API_ENDPOINTS["loans"])
         ) and "loans" in loan_response:
             resources["active_loans"] = [
                 MLOLApiConverter.get_loan(l) for l in loan_response["loans"]
@@ -871,7 +880,7 @@ class MLOLClient:
 
         if (
             loan_history_response := self._api_request(
-                method="GET", url=ENDPOINTS["api"]["loan_history"]
+                method="GET", url=API_ENDPOINTS["loan_history"]
             )
         ) and "loans" in loan_history_response:
             resources["loan_history"] = [
@@ -895,7 +904,9 @@ class MLOLClient:
         self, query: str, *, deep: bool = False
     ) -> Generator[List[MLOLBook], None, None]:
         params = {"seltip": 310, "keywords": query.strip(), "nris": 48}
-        response = self.session.request("GET", url=ENDPOINTS["search"], params=params)
+        response = self.session.request(
+            "GET", url=WEB_ENDPOINTS["search"], params=params
+        )
         soup = BeautifulSoup(response.text, "html.parser")
 
         try:
@@ -911,7 +922,9 @@ class MLOLClient:
         self, *, deep: bool = False
     ) -> Generator[List[MLOLBook], None, None]:
         params = {"seltip": 310, "news": "15day", "nris": 48}
-        response = self.session.request("GET", url=ENDPOINTS["search"], params=params)
+        response = self.session.request(
+            "GET", url=WEB_ENDPOINTS["search"], params=params
+        )
         soup = BeautifulSoup(response.text, "html.parser")
 
         try:
@@ -924,8 +937,6 @@ class MLOLClient:
         )
 
     def get_user(self) -> Optional[MLOLUser]:
-        data = self._api_request(method="GET", url=ENDPOINTS["api"]["userinfo"])
+        data = self._api_request(method="GET", url=API_ENDPOINTS["userinfo"])
         if data:
             return MLOLApiConverter.get_user(data)
-
-        return None
