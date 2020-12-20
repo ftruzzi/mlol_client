@@ -18,8 +18,9 @@ from requests.packages.urllib3.util.retry import Retry
 from requests_toolbelt import sessions
 
 LIBRARY_MAPPING_FNAME = os.path.join(os.path.dirname(__file__), "library_mapping.json")
+
 DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.67 Safari/537.36"
-DEFAULT_HEADERS = {
+DEFAULT_WEB_HEADERS = {
     "User-Agent": DEFAULT_USER_AGENT,
     "Upgrade-Insecure-Requests": "1",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
@@ -28,6 +29,7 @@ DEFAULT_HEADERS = {
     "Sec-Fetch-User": "?1",
     "Sec-Fetch-Dest": "document",
 }
+
 WEB_ENDPOINTS = {
     "index": "/home/index.aspx",
     "search": "/media/ricerca.aspx",
@@ -40,6 +42,14 @@ WEB_ENDPOINTS = {
     "reserve": "/media/prenota2.aspx",
     "cancel_reservation": "/media/annullaPr.aspx",
     "get_queue_position": "/commons/QueuePos.aspx",
+}
+
+# taken from MLOL mobile app
+DEFAULT_API_HEADERS = {
+    "Host": "api.medialibrary.it",
+    "Connection": "Keep-Alive",
+    "Accept-Encoding": "gzip",
+    "User-Agent": "okhttp/3.9.0",
 }
 
 API_ENDPOINTS = {
@@ -237,7 +247,7 @@ class MLOLClient:
 
     def __init__(self, *, domain=None, username=None, password=None, library_id=None):
         self.session = sessions.BaseUrlSession(base_url="https://medialibrary.it")
-        self.session.headers.update(DEFAULT_HEADERS)
+        self.session.headers.update(DEFAULT_WEB_HEADERS)
 
         if not (username and password and domain):
             logging.warning(
@@ -281,7 +291,7 @@ class MLOLClient:
 
     def _login_web(self, *, username: str, password: str, library_id: str):
         headers = {
-            **DEFAULT_HEADERS,
+            **self.session.headers,
             **{
                 "Host": self.domain.replace("https://", ""),
                 "Origin": self.domain,
@@ -415,9 +425,9 @@ class MLOLClient:
                 kwargs["params"] = {"token": self.api_token}
 
         kwargs["headers"] = (
-            dict(DEFAULT_HEADERS, **kwargs["headers"])
+            dict(DEFAULT_API_HEADERS, **kwargs["headers"])
             if "headers" in kwargs
-            else DEFAULT_HEADERS
+            else DEFAULT_API_HEADERS
         )
 
         response = requests.request(**kwargs)
