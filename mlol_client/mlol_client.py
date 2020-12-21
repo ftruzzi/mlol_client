@@ -98,7 +98,14 @@ class MLOLClient:
     session = None
     api_token = None
 
-    def __init__(self, *, domain=None, username=None, password=None, library_id=None):
+    def __init__(
+        self,
+        *,
+        domain: str = None,
+        username: str = None,
+        password: str = None,
+        library_id: str = None,
+    ):
         self.session = sessions.BaseUrlSession(base_url="https://medialibrary.it")
         self.session.headers.update(DEFAULT_WEB_HEADERS)
 
@@ -109,7 +116,11 @@ class MLOLClient:
         else:
             self.domain = domain
             self.username = username
-            if saved_library_id := self._get_saved_library_id():
+            if library_id:
+                if isinstance(library_id, int):
+                    library_id = str(library_id)
+                self.library_id = library_id
+            elif saved_library_id := self._get_saved_library_id():
                 self.library_id = saved_library_id
 
             self.session.base_url = "https://" + re.sub(
