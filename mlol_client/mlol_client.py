@@ -1,134 +1,106 @@
+import json
 import logging
+import os
 import re
+import time
+from base64 import b64decode
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from shutil import copy
 from typing import Optional, List, Generator
 
+import requests
 from bs4 import BeautifulSoup, Tag
 from requests.adapters import HTTPAdapter
-from requests.cookies import RequestsCookieJar
 from requests.models import Response
 from requests.packages.urllib3.util.retry import Retry
 from requests_toolbelt import sessions
-from robobrowser import RoboBrowser
 
-DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.67 Safari/537.36"
-DEFAULT_HEADERS = {
-    "User-Agent": DEFAULT_USER_AGENT,
-    "Upgrade-Insecure-Requests": "1",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
-    "Sec-Fetch-Site": "same-origin",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-User": "?1",
-    "Sec-Fetch-Dest": "document",
-}
-ENDPOINTS = {
-    "search": "/media/ricerca.aspx",
-    "login": "/user/logform.aspx",
-    "resources": "/user/risorse.aspx",
-    "get_book": "/media/scheda.aspx",
-    "redownload": "/help/dlrepeat.aspx",
-    "download": "/media/downloadebadok.aspx",
-    "pre_reserve": "/media/prenota.aspx",
-    "reserve": "/media/prenota2.aspx",
-    "cancel_reservation": "/media/annullaPr.aspx",
-    "get_queue_position": "/commons/QueuePos.aspx",
-}
+from .mlol_constants import (
+    WEB_ENDPOINTS,
+    API_ENDPOINTS,
+    DEFAULT_API_HEADERS,
+    DEFAULT_WEB_HEADERS,
+    LIBRARY_MAPPING_FNAME,
+)
+from .mlol_types import MLOLBook, MLOLLoan, MLOLReservation, MLOLUser
 
 
-class MLOLBook:
-    def __init__(
-        self,
-        *,
-        id: str,
-        title: str,
-        authors: str = None,
-        status: str = None,
-        publisher: str = None,
-        ISBNs: List[str] = None,
-        language: str = None,
-        description: str = None,
-        year: int = None,
-        formats: List[str] = None,
-        drm: bool = None,
-    ):
-        self.id = str(id)
-        self.title = title
-        self.authors = authors
-        self.status = status
-        self.publisher = publisher
-        self.ISBNs = ISBNs
-        self.language = language
-        self.description = description
-        self.year = year
-        self.formats = formats
-        self.drm = drm
+class MLOLApiConverter:
+    @staticmethod
+    def get_loan_id(download_url: str) -> Optional[str]:
+        try:
+            return b64decode(download_url.split("/")[-1]).decode()
+        except:
+            logging.error("Failed to retrieve loan ID")
+            return
 
-    def __repr__(self):
-        values = {
-            k: "{}{}".format(str(v)[:50], "..." if len(str(v)) > 50 else "")
-            for k, v in self.__dict__.items()
-            if v is not None
-        }
-        return f"<mlol_client.MLOLBook: {values}>"
+    @staticmethod
+    def get_date(date: str) -> datetime:
+        return datetime.strptime(date, "%Y-%m-%d")
 
+    @staticmethod
+    def get_book(api_response) -> MLOLBook:
+        # from "Bianchi, Luca|Rossi, Mario"
+        # to ["Luca Bianchi", "Mario Rossi"]
+        authors = [
+            " ".join(list(reversed(a.split(", "))))
+            for a in api_response["dc_creator"].split("|")
+        ]
 
-class MLOLReservation:
-    def __init__(
-        self,
-        *,
-        id: str,
-        book: MLOLBook,
-        date: datetime = None,
-        status: str = None,
-        queue_position: int = None,
-    ):
-        self.id = str(id)
-        self.book = book
-        self.date = date
-        self.status = status
-        self.queue_position = queue_position
+        return MLOLBook(
+            # skip: description (not a string), language, status (not returned)
+            id=str(api_response["id"]),
+            title=api_response["dc_title"].strip(),
+            authors=authors,
+            publisher=api_response["dc_source"],
+            # website also returns paper ISBN
+            ISBNs=[api_response["isbn"]],
+            year=MLOLApiConverter.get_date(api_response["pubdate"]).year,
+            formats=[
+                f.strip().lower()
+                for f in api_response["dc_format"].split()[0].split("/")
+            ],
+            drm="drm" in api_response["dc_format"].lower(),
+        )
 
-    def __repr__(self):
-        values = {
-            k: "{}{}".format(str(v)[:50], "..." if len(str(v)) > 50 else "")
-            for k, v in self.__dict__.items()
-            if v is not None
-        }
-        return f"<mlol_client.MLOLReservation: {values}>"
+    @staticmethod
+    def get_loan(api_response) -> Optional[MLOLLoan]:
+        if "url_download" not in api_response:
+            return
 
+        loan_id = MLOLApiConverter.get_loan_id(api_response["url_download"])
 
-class MLOLLoan:
-    def __init__(
-        self,
-        *,
-        id: str,
-        book: MLOLBook,
-        start_date: datetime = None,
-        end_date: datetime = None,
-    ):
-        self.id = str(id)
-        self.book = book
-        self.start_date = start_date
-        self.end_date = end_date
+        return MLOLLoan(
+            id=loan_id if loan_id else None,
+            book=MLOLApiConverter.get_book(api_response),
+            start_date=MLOLApiConverter.get_date(api_response["acquired"]),
+            end_date=MLOLApiConverter.get_date(api_response["expired"]),
+        )
 
-    def __repr__(self):
-        values = {
-            k: "{}{}".format(str(v)[:50], "..." if len(str(v)) > 50 else "")
-            for k, v in self.__dict__.items()
-            if v is not None
-        }
-        return f"<mlol_client.MLOLLoan: {values}>"
+    @staticmethod
+    def get_user(api_response) -> MLOLUser:
+        return MLOLUser(
+            id=api_response["userid"],
+            name=api_response["firstname"].capitalize(),
+            surname=api_response["lastname"].capitalize(),
+            username=api_response["username"],
+            remaining_loans=int(api_response["ebook_loans_remaining"]),
+            remaining_reservations=int(api_response["ebook_reservations_remaining"]),
+            expiration_date=MLOLApiConverter.get_date(api_response["expires"]),
+        )
 
 
 class MLOLClient:
     max_threads = 5
+    library_id = None
     session = None
+    api_token = None
 
-    def __init__(self, *, domain=None, username=None, password=None):
+    def __init__(self, *, domain=None, username=None, password=None, library_id=None):
         self.session = sessions.BaseUrlSession(base_url="https://medialibrary.it")
-        self.session.headers.update(DEFAULT_HEADERS)
+        self.session.headers.update(DEFAULT_WEB_HEADERS)
 
         if not (username and password and domain):
             logging.warning(
@@ -137,10 +109,18 @@ class MLOLClient:
         else:
             self.domain = domain
             self.username = username
+            if saved_library_id := self._get_saved_library_id():
+                self.library_id = saved_library_id
+
             self.session.base_url = "https://" + re.sub(
                 r"https?(://)", "", domain.rstrip("/")
             )
-            self.session.cookies = self._get_auth_cookies(username, password)
+
+            self._authenticate(
+                username=username,
+                password=password,
+                library_id=library_id if library_id else saved_library_id,
+            )
 
         adapter = HTTPAdapter(
             max_retries=Retry(
@@ -162,21 +142,159 @@ class MLOLClient:
         values["password"] = "***"
         return f"<mlol_client.MLOLClient: {values}"
 
-    def _get_auth_cookies(self, username: str, password: str) -> RequestsCookieJar:
-        # using RoboBrowser to avoid keeping a mapping of MLOL subdomains to their numeric IDs
-        # a POST request including a "lente" param would be enough
-        browser = RoboBrowser(parser="html.parser", user_agent=DEFAULT_USER_AGENT)
-        browser.open(f"{self.session.base_url}{ENDPOINTS['login']}")
-        form = [f for f in browser.get_forms() if "lusername" in f.fields][0]
-        form["lusername"] = username
-        form["lpassword"] = password
-        browser.submit_form(form)
-        return browser.session.cookies
+    def _login_web(self, *, username: str, password: str, library_id: str):
+        headers = {
+            **self.session.headers,
+            **{
+                "Host": self.domain.replace("https://", ""),
+                "Origin": self.domain,
+                "Referer": f"{self.session.base_url}/user/logform.aspx",
+            },
+        }
+        data = {"lusername": username, "lpassword": password, "lente": library_id}
+        response = self.session.request(
+            "POST",
+            url=WEB_ENDPOINTS["login"],
+            headers=headers,
+            data=data,
+            allow_redirects=False,
+        )
+        if response.headers["Location"] == "/media/esplora.aspx":
+            return True
+
+        return False
+
+    def _get_saved_library_id(self) -> Optional[str]:
+        if (
+            not os.path.isfile(LIBRARY_MAPPING_FNAME)
+            or os.stat(LIBRARY_MAPPING_FNAME).st_size == 0
+        ):
+            return
+
+        with open(LIBRARY_MAPPING_FNAME, "r", encoding="utf8") as f:
+            try:
+                data = json.load(f)
+            except:
+                logging.warning("Couldn't read library mapping file.")
+                return
+
+        k = f"{self.username}@{self.domain}"
+        if k in data and data[k]:
+            logging.debug(f"Found library ID for {k} in mapping file.")
+            return data[k]
+
+    def _update_library_mapping(self, library_id):
+        if os.path.isfile(LIBRARY_MAPPING_FNAME):
+            with open(LIBRARY_MAPPING_FNAME, "r", encoding="utf8") as f:
+                try:
+                    data = json.load(f)
+                except:
+                    if os.stat(LIBRARY_MAPPING_FNAME).st_size != 0:
+                        logging.warning(
+                            "Couldn't read library mapping file. Backing up and overwriting..."
+                        )
+                        copy(
+                            LIBRARY_MAPPING_FNAME,
+                            f"{LIBRARY_MAPPING_FNAME}_{int(time.time())}.bak",
+                        )
+                    data = {}
+        else:
+            data = {}
+
+        k = f"{self.username}@{self.domain}"
+        data[k] = library_id
+
+        with open(LIBRARY_MAPPING_FNAME, "w", encoding="utf8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        return True
+
+    def _authenticate(
+        self, username: str, password: str, library_id: str
+    ) -> Optional[bool]:
+
+        if not library_id:
+            response = self.session.request("GET", url=WEB_ENDPOINTS["index"])
+            soup = BeautifulSoup(response.text, "html.parser")
+            # get all "lente" values for subdomain, try all
+            if library_id_els := soup.select("#lente > option"):
+                library_id_values = [
+                    o.attrs["value"] for o in library_id_els if "value" in o.attrs
+                ]
+                for l_id in library_id_values:
+                    if self._login_web(
+                        username=username, password=password, library_id=l_id
+                    ):
+                        logging.debug(
+                            f"Found library ID for username {username} on {self.domain}: {l_id}"
+                        )
+                        self.library_id = l_id
+                        self._update_library_mapping(l_id)
+                        break
+
+            if not self.library_id:
+                logging.error(
+                    "Login failed. Please make sure your credentials are valid or try to specify a manual library ID."
+                )
+                return
+        else:
+            if not self._login_web(
+                username=username, password=password, library_id=library_id
+            ):
+                logging.error(
+                    "Login failed. Please make sure your credentials are valid."
+                )
+                return False
+
+        if api_token := self._get_api_token(
+            username=username, password=password, library_id=self.library_id
+        ):
+            self.api_token = api_token
+        else:
+            logging.error("Failed to retrieve your API token.")
+            return
+
+        return True
+
+    def _get_api_token(self, username: str, password: str, library_id: str) -> str:
+        data = self._api_request(
+            method="POST",
+            url=API_ENDPOINTS["login"],
+            data={
+                "username": username,
+                "password": password,
+                "portal": library_id,
+                "app_code": "",
+            },
+        )
+
+        return data["token"] if data and "token" in data else None
+
+    def _api_request(self, **kwargs) -> Optional[dict]:
+        if self.api_token:
+            if "params" in kwargs:
+                kwargs["params"].update({"token": self.api_token})
+            else:
+                kwargs["params"] = {"token": self.api_token}
+
+        kwargs["headers"] = (
+            dict(DEFAULT_API_HEADERS, **kwargs["headers"])
+            if "headers" in kwargs
+            else DEFAULT_API_HEADERS
+        )
+
+        response = requests.request(**kwargs)
+        response.raise_for_status()
+        if "application/json" in response.headers["Content-Type"]:
+            return response.json()
+
+        logging.error(f"Unexpected API response: {response.raw}")
+        return
 
     def _get_queue_position(self, reservation_id: str) -> Optional[int]:
         params = {"id": reservation_id}
         response = self.session.request(
-            "GET", url=ENDPOINTS["get_queue_position"], params=params
+            "GET", url=WEB_ENDPOINTS["get_queue_position"], params=params
         )
 
         if "in coda" in response.text and (
@@ -297,52 +415,6 @@ class MLOLClient:
         return book_data
 
     @staticmethod
-    def _parse_active_loan(loan_el: Tag, *, index: int = -1) -> Optional[MLOLLoan]:
-        loan_id = book_id = None
-        if loan_id_element := loan_el.find(
-            "a", attrs={"href": re.compile(r"(?<=idp=)\d+$")}
-        ):
-            loan_id = re.search(r"(?<=\=)\d+$", loan_id_element.attrs["href"]).group()
-        else:
-            logging.error(f"Could not find loan ID for loan #{index + 1}")
-            return
-
-        if book_id_element := loan_el.find(
-            "a", attrs={"href": re.compile(r"(?<=scheda.aspx\?id=)\d+$")}
-        ):
-            book_id = re.search(r"(?<=\=)\d+$", book_id_element.attrs["href"]).group()
-        else:
-            logging.error(f"Could not find book ID for loan #{index + 1}")
-            return
-
-        loan = MLOLLoan(id=loan_id, book=MLOLBook(id=book_id, title=""))
-
-        if book_title_el := loan_el.select_one("div > div > h3"):
-            loan.book.title = book_title_el.text.strip()
-
-        if authors_el := loan_el.find("span", attrs={"itemprop": "author"}):
-            loan.book.authors = [a.strip() for a in authors_el.text.strip().split(";")]
-
-        table_els = loan_el.select("tr")
-        start_date_els = [c for c in table_els[0] if c != "\n"]
-        end_date_els = [c for c in table_els[1] if c != "\n"]
-        if start_date_els and len(start_date_els) >= 3:
-            start_date = start_date_els[1].text.strip()
-            start_time = start_date_els[2].text.strip()
-            loan.start_date = datetime.strptime(
-                f"{start_date} {start_time}", "%d/%m/%Y %H:%M"
-            )
-
-        if end_date_els and len(end_date_els) >= 3:
-            end_date = end_date_els[1].text.strip()
-            end_time = end_date_els[2].text.strip()
-            loan.end_date = datetime.strptime(
-                f"{end_date} {end_time}", "%d/%m/%Y %H:%M"
-            )
-
-        return loan
-
-    @staticmethod
     def _parse_reservation(
         reservation_el: Tag, *, index: int = -1
     ) -> Optional[MLOLReservation]:
@@ -397,7 +469,7 @@ class MLOLClient:
         if loan_id := next((l.id for l in active_loans if l.book_id == book_id), None):
             response = self.session.request(
                 "GET",
-                url=ENDPOINTS["redownload"],
+                url=WEB_ENDPOINTS["redownload"],
                 headers={
                     **self.session.headers,
                     **{
@@ -427,7 +499,7 @@ class MLOLClient:
                 if pages == 1
                 else self.session.request(
                     method="GET",
-                    url=ENDPOINTS["search"],
+                    url=WEB_ENDPOINTS["search"],
                     params={**req_params, **{"page": i}},
                 )
             )
@@ -440,11 +512,26 @@ class MLOLClient:
             else:
                 yield books
 
+    def _get_reservations(self) -> List[MLOLReservation]:
+        reservations = []
+        response = self.session.request("GET", WEB_ENDPOINTS["resources"])
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        if reservations_el := soup.select_one("#mlolreservation"):
+            for i, reservation_el in enumerate(
+                reservations_el.select("div.bottom-buffer")
+            ):
+                reservation = self._parse_reservation(reservation_el, index=i)
+                reservation.queue_position = self._get_queue_position(reservation.id)
+                reservations.append(reservation)
+
+        return [r for r in reservations if r is not None]
+
     def get_book_by_id(self, book_id: str) -> Optional[MLOLBook]:
         logging.debug(f"Fetching book {book_id}")
         response = self.session.request(
             "GET",
-            url=ENDPOINTS["get_book"],
+            url=WEB_ENDPOINTS["get_book"],
             params={"id": book_id},
         )
         if "alert.aspx" in response.url:
@@ -495,7 +582,7 @@ class MLOLClient:
         else:
             response = self.session.request(
                 "GET",
-                url=ENDPOINTS["download"],
+                url=WEB_ENDPOINTS["download"],
                 headers={
                     **self.session.headers,
                     **{
@@ -529,7 +616,7 @@ class MLOLClient:
         return self.download_book_by_id(book.id)
 
     def get_book_url_by_id(self, book_id: str) -> str:
-        return f"{self.session.base_url}{ENDPOINTS['get_book']}?id={book_id}"
+        return f"{self.session.base_url}{WEB_ENDPOINTS['get_book']}?id={book_id}"
 
     def get_book_url(self, book: MLOLBook) -> str:
         return self.get_book_url_by_id(book.id)
@@ -551,7 +638,7 @@ class MLOLClient:
             **self.session.headers,
             **{
                 "Host": self.session.base_url.replace("https://", ""),
-                "Referer": f"{self.session.base_url}{ENDPOINTS['pre_reserve']}?id={book_id}",
+                "Referer": f"{self.session.base_url}{WEB_ENDPOINTS['pre_reserve']}?id={book_id}",
                 "Accept": "text/html, */*; q=0.01",
             },
         }
@@ -559,7 +646,7 @@ class MLOLClient:
         response = self.session.request(
             "GET",
             # don't pass params, build the URL directly to avoid percent encoding
-            url=f"{ENDPOINTS['reserve']}?id={book_id}&email={email}",
+            url=f"{WEB_ENDPOINTS['reserve']}?id={book_id}&email={email}",
             headers=headers,
         )
         soup = BeautifulSoup(response.text, "html.parser")
@@ -596,7 +683,7 @@ class MLOLClient:
         }
         response = self.session.request(
             "GET",
-            url=ENDPOINTS["cancel_reservation"],
+            url=WEB_ENDPOINTS["cancel_reservation"],
             headers=headers,
             params=params,
             allow_redirects=False,
@@ -634,8 +721,8 @@ class MLOLClient:
             )
             return False
 
-        for reservation in self.get_resources()["reservations"]:
-            if reservation.book_id == book.id:
+        for reservation in self._get_reservations():
+            if reservation.book.id == book.id:
                 return self.cancel_reservation_by_id(reservation.id)
 
         logging.error(
@@ -644,39 +731,45 @@ class MLOLClient:
         return
 
     def get_resources(self, *, deep=False) -> dict:
-        # TODO support old, inactive loans
-        active_loans = []
-        reservations = []
-        response = self.session.request("GET", ENDPOINTS["resources"])
-        soup = BeautifulSoup(response.text, "html.parser")
+        resources = {}
+        resources["reservations"] = self._get_reservations()
 
-        if active_loans_el := soup.select_one("#mlolloan"):
-            for i, loan_el in enumerate(active_loans_el.select("div.bottom-buffer")):
-                loan = self._parse_active_loan(loan_el, index=i)
-                if deep:
-                    loan.book = self.get_book_by_id(loan.book_id)
-                active_loans.append(loan)
+        if (
+            loan_response := self._api_request(method="GET", url=API_ENDPOINTS["loans"])
+        ) and "loans" in loan_response:
+            resources["active_loans"] = [
+                MLOLApiConverter.get_loan(l) for l in loan_response["loans"]
+            ]
 
-        if reservations_el := soup.select_one("#mlolreservation"):
-            for i, reservation_el in enumerate(
-                reservations_el.select("div.bottom-buffer")
-            ):
-                reservation = self._parse_reservation(reservation_el, index=i)
-                reservation.queue_position = self._get_queue_position(reservation.id)
-                if deep:
-                    reservation.book = self.get_book_by_id(reservation.book_id)
-                reservations.append(reservation)
+        if (
+            loan_history_response := self._api_request(
+                method="GET", url=API_ENDPOINTS["loan_history"]
+            )
+        ) and "loans" in loan_history_response:
+            resources["loan_history"] = [
+                MLOLApiConverter.get_loan(l) for l in loan_history_response["loans"]
+            ]
 
-        return {
-            "active_loans": [l for l in active_loans if l is not None],
-            "reservations": [r for r in reservations if r is not None],
-        }
+        if deep:
+            for reservation in resources["reservations"]:
+                if book := self.get_book_by_id(reservation.book.id):
+                    reservation.book = book
+            for loan in resources["active_loans"]:
+                if book := self.get_book_by_id(loan.book.id):
+                    loan.book = book
+            for loan in resources["loan_history"]:
+                if book := self.get_book_by_id(loan.book.id):
+                    loan.book = book
+
+        return resources
 
     def search_books(
         self, query: str, *, deep: bool = False
     ) -> Generator[List[MLOLBook], None, None]:
         params = {"seltip": 310, "keywords": query.strip(), "nris": 48}
-        response = self.session.request("GET", url=ENDPOINTS["search"], params=params)
+        response = self.session.request(
+            "GET", url=WEB_ENDPOINTS["search"], params=params
+        )
         soup = BeautifulSoup(response.text, "html.parser")
 
         try:
@@ -692,7 +785,9 @@ class MLOLClient:
         self, *, deep: bool = False
     ) -> Generator[List[MLOLBook], None, None]:
         params = {"seltip": 310, "news": "15day", "nris": 48}
-        response = self.session.request("GET", url=ENDPOINTS["search"], params=params)
+        response = self.session.request(
+            "GET", url=WEB_ENDPOINTS["search"], params=params
+        )
         soup = BeautifulSoup(response.text, "html.parser")
 
         try:
@@ -703,3 +798,8 @@ class MLOLClient:
         return self._search_books_paginated(
             req_params=params, deep=deep, pages=pages, first_response=response
         )
+
+    def get_user(self) -> Optional[MLOLUser]:
+        data = self._api_request(method="GET", url=API_ENDPOINTS["userinfo"])
+        if data:
+            return MLOLApiConverter.get_user(data)
