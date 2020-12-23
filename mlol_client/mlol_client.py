@@ -8,7 +8,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from shutil import copy
-from typing import Optional, List, Generator
+from typing import Optional, List, Generator, Tuple
 
 import requests
 from bs4 import BeautifulSoup, Tag
@@ -138,7 +138,7 @@ class MLOLClient:
                 total=3,
                 backoff_factor=1,
                 status_forcelist=[404, 429, 500, 502, 503, 504],
-                method_whitelist=["HEAD", "GET", "OPTIONS"],
+                allowed_methods=["HEAD", "GET", "OPTIONS"],
             )
         )
         self.session.mount("https://", adapter)
