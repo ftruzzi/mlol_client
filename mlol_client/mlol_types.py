@@ -90,6 +90,7 @@ class MLOLReservation:
 class MLOLUser:
     def __init__(
         self,
+        *,
         id: int,
         name: str,
         surname: str,
