@@ -1,0 +1,629 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Accept:
+      - text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Sec-Fetch-Dest:
+      - document
+      Sec-Fetch-Mode:
+      - navigate
+      Sec-Fetch-Site:
+      - same-origin
+      Sec-Fetch-User:
+      - ?1
+      Upgrade-Insecure-Requests:
+      - '1'
+      User-Agent:
+      - Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like
+        Gecko) Chrome/87.0.4280.67 Safari/537.36
+    method: GET
+    uri: https://csbno.medialibrary.it/user/risorse.aspx
+  response:
+    body:
+      string: !!binary |
+        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
+    headers:
+      Cache-Control:
+      - private
+      Content-Encoding:
+      - gzip
+      Content-Length:
+      - '15144'
+      Content-Type:
+      - text/html; charset=utf-8
+      Date:
+      - Wed, 23 Dec 2020 22:32:31 GMT
+      Server:
+      - Microsoft-IIS/7.5
+      Set-Cookie:
+      - MediaLibraryOnLineProxy=Text=MediaLibraryOnLineProxyAccess2010; domain=.medialibrary.it;
+        expires=Thu, 24-Dec-2020 10:32:32 GMT; path=/; HttpOnly
+      Vary:
+      - Accept-Encoding
+      X-AspNet-Version:
+      - 4.0.30319
+      X-Powered-By:
+      - ASP.NET
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Sec-Fetch-Dest:
+      - document
+      Sec-Fetch-Mode:
+      - navigate
+      Sec-Fetch-Site:
+      - same-origin
+      Sec-Fetch-User:
+      - ?1
+      Upgrade-Insecure-Requests:
+      - '1'
+      User-Agent:
+      - Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like
+        Gecko) Chrome/87.0.4280.67 Safari/537.36
+    method: GET
+    uri: https://csbno.medialibrary.it/commons/QueuePos.aspx?id=1324096
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAEAO29B2AcSZYlJi9tynt/SvVK1+B0oQiAYBMk2JBAEOzBiM3mkuwdaUcjKasqgcpl
+        VmVdZhZAzO2dvPfee++999577733ujudTif33/8/XGZkAWz2zkrayZ4hgKrIHz9+fB8/Inb/kb8p
+        LZbptJpljyd1evfocbPKlmnTXpf5Zx+dV8t2uyl+kD9qFllZ5vVhKh/h60dFm5XF9KOj3X16f1Xk
+        aVvhk8d3AeLo/wHKYFUaWgAAAA==
+    headers:
+      Cache-Control:
+      - private
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - text/html; charset=utf-8
+      Date:
+      - Wed, 23 Dec 2020 22:32:31 GMT
+      Server:
+      - Microsoft-IIS/7.5
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Accept-Encoding
+      X-AspNet-Version:
+      - 4.0.30319
+      X-Powered-By:
+      - ASP.NET
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Sec-Fetch-Dest:
+      - document
+      Sec-Fetch-Mode:
+      - navigate
+      Sec-Fetch-Site:
+      - same-origin
+      Sec-Fetch-User:
+      - ?1
+      Upgrade-Insecure-Requests:
+      - '1'
+      User-Agent:
+      - Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like
+        Gecko) Chrome/87.0.4280.67 Safari/537.36
+    method: GET
+    uri: https://csbno.medialibrary.it/commons/QueuePos.aspx?id=1233411
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAEAO29B2AcSZYlJi9tynt/SvVK1+B0oQiAYBMk2JBAEOzBiM3mkuwdaUcjKasqgcpl
+        VmVdZhZAzO2dvPfee++999577733ujudTif33/8/XGZkAWz2zkrayZ4hgKrIHz9+fB8/InZ3/pG/
+        KS2W6bSaZY8ndXr36HGzypZp016X+WcfnVfLdrspfpA/ahZZWeb1YSof4etHRZuVxfSjoz16fVXk
+        aVvhg8d3AeHo/wGF9Om9WgAAAA==
+    headers:
+      Cache-Control:
+      - private
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - text/html; charset=utf-8
+      Date:
+      - Wed, 23 Dec 2020 22:32:31 GMT
+      Server:
+      - Microsoft-IIS/7.5
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Accept-Encoding
+      X-AspNet-Version:
+      - 4.0.30319
+      X-Powered-By:
+      - ASP.NET
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip
+      Connection:
+      - Keep-Alive
+      Host:
+      - api.medialibrary.it
+      User-Agent:
+      - okhttp/3.9.0
+    method: GET
+    uri: https://api.medialibrary.it/app/loans?token=de8ae9ad253b48dda2ebaea47c6439d1
+  response:
+    body:
+      string: "{\"eula\":\"1.0\",\"loans\":[{\"id\":150208312,\"dc_title\":\"Nel contagio\"\
+        ,\"dc_creator\":\"Giordano, Paolo\",\"dc_source\":\"Einaudi\",\"dc_format\"\
+        :\"EPUB con DRM Adobe\",\"pubdate\":\"2020-03-10\",\"isbn\":\"9788858434208\"\
+        ,\"acquired\":\"2020-12-15\",\"expired\":\"2020-12-29\",\"cover\":\"https://shop.medialibrary.it/media/images/mondadori/cover/EDGT223908.jpg\"\
+        ,\"url_download\":\"https://api.medialibrary.it/app/loanurl/NDU3Nzc5Nw==\"\
+        ,\"dc_description\":\"\uFEFF\uFEFF\uFEFFL'epidemia di Covid-19 si candida\
+        \ a essere l'emergenza sanitaria pi\xFA importante della nostra epoca. Ci\
+        \ svela la complessit\xE0 del mondo che abitiamo, delle sue logiche sociali,\
+        \ politiche, economiche, interpersonali e psichiche. Ci\xF2 che stiamo attraversando\
+        \ ha un carattere sovraidentitario e sovraculturale. Richiede uno sforzo di\
+        \ fantasia che in un regime normale non siamo abituati a compiere: vederci\
+        \ inestricabilmente connessi gli uni agli altri e tenere in conto la loro\
+        \ presenza nelle nostre scelte individuali. Nel contagio siamo un organismo\
+        \ unico, una comunit\xE0 che comprende l'interezza degli esseri umani. Nel\
+        \ contagio la mancanza di solidariet\xE0 \xE8 prima di tutto un difetto d'immaginazione.\"\
+        ,\"lcp\":false,\"passphrase\":\"\"}]}"
+    headers:
+      Access-Control-Allow-Methods:
+      - GET, PUT, POST, DELETE, OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Cache-Control:
+      - no-cache
+      Content-Length:
+      - '1160'
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Wed, 23 Dec 2020 22:32:34 GMT
+      Expires:
+      - '-1'
+      Pragma:
+      - no-cache
+      Server:
+      - Microsoft-IIS/7.5
+      Set-Cookie:
+      - ASP.NET_SessionId=1qeixjskvkled5jbieyiiys5; path=/; HttpOnly
+      X-AspNet-Version:
+      - 4.0.30319
+      X-Powered-By:
+      - ASP.NET
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip
+      Connection:
+      - Keep-Alive
+      Host:
+      - api.medialibrary.it
+      User-Agent:
+      - okhttp/3.9.0
+    method: GET
+    uri: https://api.medialibrary.it/app/loanhistory?token=de8ae9ad253b48dda2ebaea47c6439d1
+  response:
+    body:
+      string: "{\"eula\":\"1.0\",\"loans\":[{\"id\":150000536,\"dc_title\":\"Imperium\"\
+        ,\"dc_creator\":\"Kapuscinski, Ryszard\",\"dc_source\":\"Feltrinelli Editore\"\
+        ,\"dc_format\":\"EPUB con DRM Adobe\",\"pubdate\":\"2011-05-11\",\"isbn\"\
+        :\"9788807947261\",\"acquired\":\"2020-12-06\",\"expired\":\"2020-12-19\"\
+        ,\"cover\":\"https://shop.medialibrary.it/media/images/edigita/cover/EDGT6987.jpg\"\
+        ,\"url_download\":\"\",\"dc_description\":\"\\\"Imperium\\\" \xE8 la narrazione\
+        \ di un viaggio per lo pi\xF9 sconosciuto, un'affascinante e personale chiave\
+        \ per capire l'ex Unione Sovietica. Un reportage polifonico, intessuto di\
+        \ ricordi, dove personaggi, luoghi e motivi si rincorrono e si sovrappongono\
+        \ dal 1939 al 1992, dal Baltico al Pacifico.Nel momento in cui il grande impero\
+        \ si dissolve, con fragore e sangue, in mille rivoli e staterelli, la cronaca\
+        \ di Kapuscinski scopre e registra realt\xE0 sommerse dalla violenza, dove\
+        \ trionfa una Babele di lingue e di culture.\",\"lcp\":false,\"passphrase\"\
+        :\"\"},{\"id\":150196612,\"dc_title\":\"Pi\",\"dc_creator\":\"Kohen, Akilah\
+        \ Azra\",\"dc_source\":\"Mondadori\",\"dc_format\":\"EPUB con DRM Adobe\"\
+        ,\"pubdate\":\"2019-11-13\",\"isbn\":\"9788852092718\",\"acquired\":\"2020-12-06\"\
+        ,\"expired\":\"2020-12-20\",\"cover\":\"https://shop.medialibrary.it/media/images/mondadori/cover/EDGT240378.jpg\"\
+        ,\"url_download\":\"\",\"dc_description\":\"Arriviamo a noi stessi passo dopo\
+        \ passo, attraverso le scelte che facciamo. L'essere umano si forma scegliendo\
+        \ in ogni istante. Rinasciamo in ogni momento se facciamo la cosa giusta,\
+        \ altrimenti ogni volta muore una piccola parte di noi. Pi, il libro finale\
+        \ della trilogia-evento, ci fa il dono della nostra storia. Attraverso le\
+        \ scelte di \xD6zge comprendiamo come le battaglie non si vincano attraverso\
+        \ la lotta e che c'\xE8 vera vittoria solo se non lasciamo il sentiero della\
+        \ rettitudine; attraverso Can vediamo come tutto ci\xF2 che facciamo torna\
+        \ indietro; Duru ci parla delle amare conseguenze che derivano dal valutare\
+        \ noi stessi solo attraverso gli occhi degli altri; Bilge ci offre la prova\
+        \ che possiamo esistere grazie alla nostra intelligenza e Deniz ci insegna\
+        \ a concentrarci su cosa sia davvero importante. Ognuno di questi personaggi\
+        \ indimenticabili ci dice qualcosa di noi stessi.  Pi \xE8 il libro che ci\
+        \ permette di veder fiorire il seme che abbiamo piantato dentro di noi: \\\
+        \"Ci gettarono nella terra, ma non sapevano che noi eravamo i semi\\\".\"\
+        ,\"lcp\":false,\"passphrase\":\"\"},{\"id\":150049373,\"dc_title\":\"1914-1918.\
+        \ La grande guerra\",\"dc_creator\":\"Janz, Oliver\",\"dc_source\":\"Einaudi\"\
+        ,\"dc_format\":\"EPUB con DRM Adobe\",\"pubdate\":\"2014-10-18\",\"isbn\"\
+        :\"9788858417096\",\"acquired\":\"2020-12-06\",\"expired\":\"2020-12-20\"\
+        ,\"cover\":\"https://shop.medialibrary.it/media/images/mondadori/cover/EDGT226314.jpg\"\
+        ,\"url_download\":\"\",\"dc_description\":\"La Grande Guerra non fu soltanto\
+        \  il primo conflitto \\\"totale\\\" - capace,  cio\xE8, di coinvolgere e\
+        \ mobilitare ogni  forza sociale ed enormi risorse economiche  -, ma anche\
+        \ la prima guerra  realmente globale nella storia del  mondo. Essa rappresent\xF2\
+        \ non solo per  l'Europa, ma anche per molti paesi extraeuropei  la \\\"catastrofe\
+        \ originaria del  XX secolo\\\". Prima di allora mai nessun  evento aveva\
+        \ cambiato la vita di cos\xED  tante persone in tutti i continenti. La  prima\
+        \ guerra mondiale dimostra quanto  il mondo e il sistema di potere internazionale\
+        \  fossero globalizzati gi\xE0 nel  1914. Un disastro su vasta scala che,\
+        \  a partire dai Balcani, influenz\xF2 in maniera  diretta sia i sistemi produttivi\
+        \ e  finanziari sia l'assetto sociale e politico  dei paesi che presero attivamente\
+        \ parte  al conflitto, dall'Europa e le sue colonie  fino ai molti Stati extraeuropei.\
+        \ Ed  \xE8 proprio a partire da questo punto di  vista globale che Oliver\
+        \ Janz analizza  gli eventi e le conseguenze di lungo  periodo del conflitto.\
+        \ Storia politica,  economica, militare e sociale - dai movimenti  delle masse\
+        \ e degli eserciti alla  vita quotidiana delle popolazioni -,  raccontata\
+        \ avvalendosi dei pi\xFA recenti  apporti della ricerca storiografica: un\
+        \  saggio innovativo che unisce al rigore  della ricostruzione storica una\
+        \ prospettiva  originale e ricca di sfaccettature.\",\"lcp\":false,\"passphrase\"\
+        :\"\"},{\"id\":150154510,\"dc_title\":\"Correzione\",\"dc_creator\":\"Bernhard,\
+        \ Thomas\",\"dc_source\":\"Einaudi\",\"dc_format\":\"EPUB con DRM Adobe\"\
+        ,\"pubdate\":\"2017-07-19\",\"isbn\":\"9788858426746\",\"acquired\":\"2020-07-08\"\
+        ,\"expired\":\"2020-07-21\",\"cover\":\"https://shop.medialibrary.it/media/images/mondadori/cover/EDGT227052.jpg\"\
+        ,\"url_download\":\"\",\"dc_description\":\"<A HREF=\\\"http://www.einaudi.it/content/download/12350/81674/version/1/file/Bernhard_Correzione.pdf\\\
+        \"><I>Leggi un estratto</I></A><BR><BR>    ***<BR><BR>      Figura monomaniacale\
+        \ e paranoica, Roithamer \xE8 uno  dei grandi personaggi bernhardiani. Liberamente\
+        \  modellato sulla figura di Wittgenstein, \xE8 austriaco,  \xE8 scienziato,\
+        \ insegna a Cambridge. In anni di febbrili  progetti e folle, perfezionistico\
+        \ lavoro, costruisce  in mezzo a un bosco una stranissima abitazione per \
+        \ la sorella, l'unica persona da lui amata, \\\"un cono  nel quale la sorella\
+        \ dovr\xE0 abitare in futuro ed essere  felice, essere al colmo della felicit\xE0\
+        \\\". Ma la gioia  non ci sar\xE0, per nessuno. E il cono - rifugio,  mausoleo,\
+        \ centro geometrico perfetto dell'esistenza  e del pensiero - \xE8 destinato\
+        \ a scomparire risucchiato  da una natura tentacolare e nemica che pure, a\
+        \ tratti, si  apre pacificante \\\"sul sentiero della scuola e della vita\\\
+        \".<BR><BR>    ***<BR><BR>    Pessimista in perenne dialogo  con la morte,\
+        \ tetro nichilista,  provocatore iconoclasta, malato di  <I>morbus austriacus</I>:\
+        \ \xE8 cos\xED che spesso  viene etichettato Bernhard. Ci\xF2 pu\xF2  in parte\
+        \ essere vero per la produzione  che precede <I>Correzione</I>; ma a partire\
+        \  da questo romanzo tali semplificazioni  sono contestabili, sia perch\xE9\
+        \ in seguito  si far\xE0 sempre pi\xFA esplicita la vis  comica sia perch\xE9\
+        \ al solido muro della  negativit\xE0 verranno contrapposti  un magnete di\
+        \ forza vitale e pulsante,  uno o pi\xFA nuclei di esperienze positive.  In\
+        \ <I>Correzione </I>uno di questi nuclei  \xE8 certamente la limpida descrizione\
+        \  del percorso che Roithamer,  l'imbalsamatore e il narratore fanno  per\
+        \ andare a scuola: \\\"per noi il  sentiero della scuola, come il sentiero\
+        \  della vita, \xE8 sempre stato solo un  sentiero di dolore, ma nello stesso\
+        \  tempo un sentiero di tutte le scoperte  possibili e di una felicit\xE0\
+        \ sublime\\\".  Vi \xE8 poi la rosa di carta che il narratore  trova nel cassetto\
+        \ superiore del  com\xF2 della soffitta, che gli rammenta  i momenti gioiosi\
+        \ trascorsi insieme  durante una sagra di paese nella quale  il giovane Roithamer\
+        \ vinse al tiro  a segno un mazzo di 24 rose di carta  gialla - senza mai\
+        \ sbagliare un colpo:  proprio lui, che contro la tradizione  di famiglia\
+        \ detestava la caccia. Le regal\xF2, tutte meno una, \\\"a una  ragazza sconosciuta\
+        \ che nel passargli  accanto gli aveva ricordato sua sorella\\\".  La rosa\
+        \ custodita \xE8 l'emblema  di una possibile felicit\xE0, di una chance  che,\
+        \ sebbene rifiutata, era a portata  di mano. Una rosa che racchiude  l'enigma\
+        \ di una vita nel gesto di un  ventitreenne che dona tutti i suoi  anni a\
+        \ una sconosciuta in una serata  di felicit\xE0.<BR><BR>    <B>Dalla prefazione\
+        \ di Vincenzo Quagliotti</B>\",\"lcp\":false,\"passphrase\":\"\"}]}"
+    headers:
+      Access-Control-Allow-Methods:
+      - GET, PUT, POST, DELETE, OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Cache-Control:
+      - no-cache
+      Content-Length:
+      - '7160'
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Wed, 23 Dec 2020 22:32:34 GMT
+      Expires:
+      - '-1'
+      Pragma:
+      - no-cache
+      Server:
+      - Microsoft-IIS/7.5
+      Set-Cookie:
+      - ASP.NET_SessionId=zxge5on005zxpl3ipiik3u2d; path=/; HttpOnly
+      X-AspNet-Version:
+      - 4.0.30319
+      X-Powered-By:
+      - ASP.NET
+    status:
+      code: 200
+      message: OK
+version: 1
