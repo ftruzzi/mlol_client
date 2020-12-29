@@ -108,13 +108,17 @@ class MLOLClient:
     ):
         self.session = sessions.BaseUrlSession(base_url="https://medialibrary.it")
         self.session.headers.update(DEFAULT_WEB_HEADERS)
+        if domain:
+            self.domain = domain
+            self.session.base_url = "https://" + re.sub(
+                r"https?(://)", "", domain.rstrip("/")
+            )
 
         if not (username and password and domain):
             logging.warning(
-                "You did not provide authentication credentials and a subdomain. You will not be able to perform actions that require authentication."
+                "You did not provide authentication credentials and a domain. You will not be able to perform actions that require authentication."
             )
         else:
-            self.domain = domain
             self.username = username
             if library_id:
                 if isinstance(library_id, int):
@@ -122,10 +126,6 @@ class MLOLClient:
                 self.library_id = library_id
             elif saved_library_id := self._get_saved_library_id():
                 self.library_id = saved_library_id
-
-            self.session.base_url = "https://" + re.sub(
-                r"https?(://)", "", domain.rstrip("/")
-            )
 
             self._authenticate(
                 username=username,
