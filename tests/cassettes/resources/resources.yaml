@@ -437,7 +437,7 @@ interactions:
       User-Agent:
       - okhttp/3.9.0
     method: GET
-    uri: https://api.medialibrary.it/app/loans?token=de8ae9ad253b48dda2ebaea47c6439d1
+    uri: https://api.medialibrary.it/app/loans
   response:
     body:
       string: "{\"eula\":\"1.0\",\"loans\":[{\"id\":150208312,\"dc_title\":\"Nel contagio\"\
@@ -498,7 +498,7 @@ interactions:
       User-Agent:
       - okhttp/3.9.0
     method: GET
-    uri: https://api.medialibrary.it/app/loanhistory?token=de8ae9ad253b48dda2ebaea47c6439d1
+    uri: https://api.medialibrary.it/app/loanhistory
   response:
     body:
       string: "{\"eula\":\"1.0\",\"loans\":[{\"id\":150000536,\"dc_title\":\"Imperium\"\

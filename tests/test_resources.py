@@ -20,12 +20,17 @@ if not username or not password or not domain:
     sys.exit(1)
 
 client = MLOLClient(domain=domain, username=username, password=password)
-
 # we are recording this data once, and test expected values have to be dependent on the data we have at the moment
 with vcr.use_cassette(
-    os.path.join("cassettes", "resources", "resources.yaml"),
-    record_mode="once",
+    os.path.join(
+        os.path.dirname(os.path.realpath(__file__)),
+        "cassettes",
+        "resources",
+        "resources.yaml",
+    ),
+    record_mode="none",
     filter_headers=["Cookie", "Set-Cookie"],
+    filter_query_parameters=["token"],
 ):
     resources = client.get_resources()
     reservations = resources["reservations"]
