@@ -108,13 +108,17 @@ class MLOLClient:
     ):
         self.session = sessions.BaseUrlSession(base_url="https://medialibrary.it")
         self.session.headers.update(DEFAULT_WEB_HEADERS)
+        if domain:
+            self.domain = domain
+            self.session.base_url = "https://" + re.sub(
+                r"https?(://)", "", domain.rstrip("/")
+            )
 
         if not (username and password and domain):
             logging.warning(
-                "You did not provide authentication credentials and a subdomain. You will not be able to perform actions that require authentication."
+                "You did not provide authentication credentials and a domain. You will not be able to perform actions that require authentication."
             )
         else:
-            self.domain = domain
             self.username = username
             if library_id:
                 if isinstance(library_id, int):
@@ -122,10 +126,6 @@ class MLOLClient:
                 self.library_id = library_id
             elif saved_library_id := self._get_saved_library_id():
                 self.library_id = saved_library_id
-
-            self.session.base_url = "https://" + re.sub(
-                r"https?(://)", "", domain.rstrip("/")
-            )
 
             self._authenticate(
                 username=username,
@@ -577,7 +577,7 @@ class MLOLClient:
         return self.get_book_by_id(book.id)
 
     def download_book_by_id(self, book_id: str) -> Optional[bytes]:
-        if not self.session.cookies.get(".ASPXAUTH"):
+        if not self.is_logged_in():
             logging.error(
                 "You need to be authenticated to MLOL in order to download books."
             )
@@ -633,7 +633,7 @@ class MLOLClient:
         return self.get_book_url_by_id(book.id)
 
     def reserve_book_by_id(self, book_id: str, *, email: str) -> Optional[bool]:
-        if not self.session.cookies.get(".ASPXAUTH"):
+        if not self.is_logged_in():
             logging.error(
                 "You need to be authenticated to MLOL in order to download books."
             )
@@ -717,7 +717,7 @@ class MLOLClient:
         if not isinstance(book, MLOLBook):
             raise ValueError(f"Expected MLOLBook, got {type(book)}")
 
-        if not self.session.cookies.get(".ASPXAUTH"):
+        if not self.is_logged_in():
             logging.error(
                 "You need to be authenticated to MLOL in order to manage reservations."
             )
@@ -814,3 +814,9 @@ class MLOLClient:
         data = self._api_request(method="GET", url=API_ENDPOINTS["userinfo"])
         if data:
             return MLOLApiConverter.get_user(data)
+
+    def is_logged_in(self) -> bool:
+        return (
+            self.session.cookies.get(".ASPXAUTH") is not None
+            and self.api_token is not None
+        )

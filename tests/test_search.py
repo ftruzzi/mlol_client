@@ -2,10 +2,13 @@ import os
 
 import vcr
 from pytest_cases import parametrize, fixture, fixture_ref
+from vcr import record_mode
 
 from mlol_client import MLOLClient, MLOLBook
 
-CASSETTE_BASE_PATH = os.path.join("cassettes", "test_search")
+CASSETTE_BASE_PATH = os.path.join(
+    os.path.dirname(os.path.realpath(__file__)), "cassettes", "test_search"
+)
 
 NO_RESULT_QUERY = "asdqwedasdzxc"
 ONE_PAGE_QUERY = "quammen"
@@ -16,8 +19,11 @@ client = MLOLClient()
 
 
 @fixture
-def no_search_results():
-    with vcr.use_cassette(os.path.join(CASSETTE_BASE_PATH, "no_search_results.yaml")):
+@parametrize("client", [fixture_ref("client_no_auth")])
+def no_search_results(client):
+    with vcr.use_cassette(
+        os.path.join(CASSETTE_BASE_PATH, "no_search_results.yaml"), record_mode="none"
+    ):
         results_generator = client.search_books(NO_RESULT_QUERY)
         results = []
         for page in results_generator:
@@ -30,9 +36,11 @@ def test_no_results_length(no_search_results):
 
 
 @fixture
-def search_results_single_page():
+@parametrize("client", [fixture_ref("client_no_auth")])
+def search_results_single_page(client):
     with vcr.use_cassette(
-        os.path.join(CASSETTE_BASE_PATH, "search_results_single_page.yaml")
+        os.path.join(CASSETTE_BASE_PATH, "search_results_single_page.yaml"),
+        record_mode="none",
     ):
         results_generator = client.search_books(ONE_PAGE_QUERY, deep=False)
         results = []
@@ -42,7 +50,8 @@ def search_results_single_page():
 
 
 @fixture
-def search_results_single_page_deep():
+@parametrize("client", [fixture_ref("client_no_auth")])
+def search_results_single_page_deep(client):
     # don't record cassette here -- deep page queries are threaded and not executed in the same order
     # with vcr.use_cassette(os.path.join(CASSETTE_BASE_PATH, "search_results_single_page_deep.yaml")):
     results_generator = client.search_books(ONE_PAGE_QUERY, deep=True)
@@ -94,9 +103,11 @@ def test_search_result_fields_simple(search_results_single_page):
 
 
 @fixture
-def search_results_multiple_pages():
+@parametrize("client", [fixture_ref("client_no_auth")])
+def search_results_multiple_pages(client):
     with vcr.use_cassette(
-        os.path.join(CASSETTE_BASE_PATH, "search_results_multiple_pages.yaml")
+        os.path.join(CASSETTE_BASE_PATH, "search_results_multiple_pages.yaml"),
+        record_mode="none",
     ):
         results_generator = client.search_books(MULTIPLE_PAGES_QUERY)
         results = []
