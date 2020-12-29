@@ -1,5 +1,5 @@
 import pytest
-from pytest_cases import parametrize_with_cases, fixture_ref, parametrize
+from pytest_cases import parametrize_with_cases
 
 
 @pytest.mark.vcr(record_mode="none")
