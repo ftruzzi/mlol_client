@@ -775,9 +775,14 @@ class MLOLClient:
         return resources
 
     def search_books(
-        self, query: str, *, deep: bool = False
+        self, query: str, *, deep: bool = False, only_available: bool = False
     ) -> Generator[List[MLOLBook], None, None]:
         params = {"seltip": 310, "keywords": query.strip(), "nris": 48}
+        if only_available:
+            if not self.is_logged_in():
+                logging.error("You need to be logged in to check for available books.")
+                return
+            params.update({"chkdispo": "on"})
         response = self.session.request(
             "GET", url=WEB_ENDPOINTS["search"], params=params
         )
@@ -793,9 +798,15 @@ class MLOLClient:
         )
 
     def get_latest_books(
-        self, *, deep: bool = False
+        self, *, deep: bool = False, only_available: bool = False
     ) -> Generator[List[MLOLBook], None, None]:
         params = {"seltip": 310, "news": "15day", "nris": 48}
+        if only_available:
+            if not self.is_logged_in():
+                logging.error("You need to be logged in to check for available books.")
+                return
+            params.update({"chkdispo": "on"})
+
         response = self.session.request(
             "GET", url=WEB_ENDPOINTS["search"], params=params
         )
