@@ -114,11 +114,7 @@ class MLOLClient:
                 r"https?(://)", "", domain.rstrip("/")
             )
 
-        if not (username and password and domain):
-            logging.warning(
-                "You did not provide authentication credentials and a domain. You will not be able to perform actions that require authentication."
-            )
-        else:
+        if username and password and domain:
             self.username = username
             if library_id:
                 if isinstance(library_id, int):
