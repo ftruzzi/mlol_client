@@ -406,6 +406,18 @@ class MLOLClient:
         if language := page.find("span", attrs={"itemprop": "inLanguage"}):
             book_data["language"] = language.text.strip()
 
+        if categories := page.find("span", attrs={"itemprop": "keywords"}):
+            book_data["categories"] = []
+            for category_line in categories.text.replace("# in ", "").split("\n\n"):
+                stripped_category_line = category_line.strip()
+                if not stripped_category_line:
+                    continue
+
+                category = [
+                    c.strip() for c in stripped_category_line.split("/") if c.strip()
+                ]
+                book_data["categories"].append(category)
+
         if year := page.find("span", attrs={"itemprop": "datePublished"}):
             book_data["year"] = int(year.text.strip())
 
@@ -565,6 +577,7 @@ class MLOLClient:
             status=book_data["status"],
             language=book_data["language"],
             description=book_data["description"],
+            categories=book_data["categories"],
             year=book_data["year"],
             formats=book_data["formats"],
             drm=book_data["drm"],
@@ -783,6 +796,7 @@ class MLOLClient:
                 logging.error("You need to be logged in to check for available books.")
                 return
             params.update({"chkdispo": "on"})
+
         response = self.session.request(
             "GET", url=WEB_ENDPOINTS["search"], params=params
         )

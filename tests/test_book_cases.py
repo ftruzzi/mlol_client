@@ -6,6 +6,20 @@ def case_book():
         "publisher": "Adelphi",
         "ISBNs": ["9788845982484", "9788845932045"],
         "language": "italiano",
+        "categories": [
+            ["Scienze umane", "Storia", "Storia culturale e sociale"],
+            [
+                "Medicina",
+                "Altre branche della medicina",
+                "Microbiologia e virologia medica",
+            ],
+            [
+                "Matematica e scienze",
+                "Scienze: argomenti d'interesse generale",
+                "Biologia, scienze della vita",
+                "Scienze: opere divulgative",
+            ],
+        ],
         "year": 2020,
         "formats": ["epub"],
         "drm": True,

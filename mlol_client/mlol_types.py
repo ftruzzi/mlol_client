@@ -14,6 +14,7 @@ class MLOLBook:
         ISBNs: List[str] = None,
         language: str = None,
         description: str = None,
+        categories: List[str] = None,
         year: int = None,
         formats: List[str] = None,
         drm: bool = None,
@@ -26,6 +27,7 @@ class MLOLBook:
         self.ISBNs = ISBNs
         self.language = language
         self.description = description
+        self.categories = categories
         self.year = year
         self.formats = formats
         self.drm = drm
