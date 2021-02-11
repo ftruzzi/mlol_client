@@ -314,7 +314,7 @@ class MLOLClient:
 
     def _redownload_owned_book(self, book_id: str) -> Response:
         active_loans = self.get_resources()["active_loans"]
-        if loan_id := next((l.id for l in active_loans if l.book_id == book_id), None):
+        if loan_id := next((l.id for l in active_loans if l.book.id == book_id), None):
             response = self.session.request(
                 "GET",
                 url=WEB_ENDPOINTS["redownload"],
