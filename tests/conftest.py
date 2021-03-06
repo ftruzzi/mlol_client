@@ -1,5 +1,3 @@
-from re import L
-from _pytest.assertion import pytest_runtest_protocol
 import os
 import logging
 import sys
