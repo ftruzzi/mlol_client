@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="mlol_client",
-    version="0.0.1",
+    version="0.1.0",
     author="Francesco Truzzi",
     author_email="francesco@truzzi.me",
     description="A Python client for MLOL (medialibrary.it)",
