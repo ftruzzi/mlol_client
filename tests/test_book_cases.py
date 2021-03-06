@@ -37,5 +37,6 @@ def case_book_multiple_formats_adobe_drm():
 def case_book_multiple_formats_nodrm():
     return "850636151", {"formats": ["epub", "mobi"], "drm": "none"}
 
+
 def case_book_social_drm():
     return "150053479", {"drm": "social"}

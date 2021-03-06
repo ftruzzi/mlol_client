@@ -414,7 +414,9 @@ class MLOLClient:
 
         return self.get_book_by_id(book.id)
 
-    def download_book_by_id(self, book_id: str, download_format: str = "epub") -> Optional[bytes]:
+    def download_book_by_id(
+        self, book_id: str, download_format: str = "epub"
+    ) -> Optional[bytes]:
         if not self.is_logged_in():
             logging.error(
                 "You need to be authenticated to MLOL in order to download books."
@@ -423,7 +425,11 @@ class MLOLClient:
 
         book = self.get_book_by_id(book_id)
         if book.drm != "adobe":
-            logging.error("Your book has {} DRM. Only Adobe DRM downloads are supported as of now.".format(book.drm if book.drm else "no"))
+            logging.error(
+                "Your book has {} DRM. Only Adobe DRM downloads are supported as of now.".format(
+                    book.drm if book.drm else "no"
+                )
+            )
             return
         if book.status == "owned":
             logging.info("You already own this book. Redownloading...")
@@ -432,7 +438,13 @@ class MLOLClient:
             logging.error(f"Book is not available for download. Status: {book.status}")
             return
         else:
-            download_format = "epub" if "epub" in book.formats else "pdf" if "pdf" in book.formats else book.formats[0]
+            download_format = (
+                "epub"
+                if "epub" in book.formats
+                else "pdf"
+                if "pdf" in book.formats
+                else book.formats[0]
+            )
             response = self.session.request(
                 "GET",
                 url=WEB_ENDPOINTS["download"],
