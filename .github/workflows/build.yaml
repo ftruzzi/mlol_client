@@ -6,11 +6,10 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - dev
+      - master
   pull_request:
     branches:
       - master
-      - dev
 jobs:
   lint_test:
     runs-on: ubuntu-latest
