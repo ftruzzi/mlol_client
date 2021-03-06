@@ -414,7 +414,9 @@ class MLOLClient:
 
         return self.get_book_by_id(book.id)
 
-    def download_book_by_id(self, book_id: str) -> Optional[bytes]:
+    def download_book_by_id(
+        self, book_id: str, download_format: str = "epub"
+    ) -> Optional[bytes]:
         if not self.is_logged_in():
             logging.error(
                 "You need to be authenticated to MLOL in order to download books."
@@ -422,6 +424,13 @@ class MLOLClient:
             return
 
         book = self.get_book_by_id(book_id)
+        if book.drm != "adobe":
+            logging.error(
+                "Your book has {} DRM. Only Adobe DRM downloads are supported as of now.".format(
+                    book.drm if book.drm else "no"
+                )
+            )
+            return
         if book.status == "owned":
             logging.info("You already own this book. Redownloading...")
             response = self._redownload_owned_book(book_id)
@@ -429,6 +438,13 @@ class MLOLClient:
             logging.error(f"Book is not available for download. Status: {book.status}")
             return
         else:
+            download_format = (
+                "epub"
+                if "epub" in book.formats
+                else "pdf"
+                if "pdf" in book.formats
+                else book.formats[0]
+            )
             response = self.session.request(
                 "GET",
                 url=WEB_ENDPOINTS["download"],
@@ -436,10 +452,10 @@ class MLOLClient:
                     **self.session.headers,
                     **{
                         "Host": self.session.base_url.replace("https://", ""),
-                        "Referer": f"{self.session.base_url}/media/downloadebad2.aspx?unid={book_id}&form=epub",
+                        "Referer": f"{self.session.base_url}/media/downloadebad2.aspx?unid={book_id}&form={download_format}",
                     },
                 },
-                params={"unid": book_id, "form": "epub"},
+                params={"unid": book_id, "form": download_format},
                 allow_redirects=False,
             )
 
@@ -455,7 +471,6 @@ class MLOLClient:
             return response.content
         else:
             logging.error(f"Failed to download book {book_id}")
-            logging.debug(response.text)
             return None
 
     def download_book(self, book: MLOLBook) -> Optional[bytes]:

@@ -22,7 +22,7 @@ def case_book():
         ],
         "year": 2020,
         "formats": ["epub"],
-        "drm": True,
+        "drm": "adobe",
     }
 
 
@@ -30,9 +30,13 @@ def case_book_multiple_authors():
     return "150232512", {"authors": ["Mauro Ceré", "Dario Spelta"]}
 
 
-def case_book_multiple_formats_drm():
-    return "150226541", {"formats": ["pdf", "epub"], "drm": True}
+def case_book_multiple_formats_adobe_drm():
+    return "150226541", {"formats": ["pdf", "epub"], "drm": "adobe"}
 
 
 def case_book_multiple_formats_nodrm():
-    return "850636151", {"formats": ["epub", "mobi"], "drm": False}
+    return "850636151", {"formats": ["epub", "mobi"], "drm": "none"}
+
+
+def case_book_social_drm():
+    return "150053479", {"drm": "social"}

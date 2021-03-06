@@ -63,6 +63,19 @@ def _parse_book_status(status: str) -> Optional[str]:
     return None
 
 
+def _parse_drm(drm: str) -> Optional[str]:
+    if not drm:
+        return None
+    drm = drm.strip().lower()
+    if "social" in drm:
+        return "social"
+    if "adobe" in drm:
+        return "adobe"
+    if "drm" not in drm:
+        return "none"
+    return "unknown"
+
+
 def _parse_book_page(page: Tag) -> dict:
     book_data = defaultdict(lambda: None)
 
@@ -116,7 +129,7 @@ def _parse_book_page(page: Tag) -> dict:
             .parent.parent.find("span")
             .text.strip()
         )
-        book_data["drm"] = "drm" in formats_str.lower()
+        book_data["drm"] = _parse_drm(formats_str)
         book_data["formats"] = [
             f.strip().lower() for f in formats_str.split()[0].split("/")
         ]
